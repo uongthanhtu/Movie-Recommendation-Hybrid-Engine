@@ -490,3 +490,9 @@ Start API and Redis services using Docker Compose:
 ```bash
 docker-compose up -d
 ```
+
+---
+
+## 11. License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
