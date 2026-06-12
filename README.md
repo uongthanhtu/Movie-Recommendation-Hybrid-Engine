@@ -10,10 +10,10 @@ The microservice operates in a framework-agnostic REST pattern. The primary back
 
 ```mermaid
 graph TD
-    subgraph "Primary Backend (Spring Boot, Node.js, Django, etc.)"
-        FE["Frontend (React / Mobile)"]
-        BACKEND["Backend Service API"]
-        DB_PROD[("PostgreSQL Database")]
+    subgraph "Primary App Ecosystem (Spring Boot, NestJS, Django, etc.)"
+        FE["Frontend (React, Vue, iOS, Android, etc.)"]
+        BACKEND["Primary Backend API"]
+        DB_PROD[("Primary Database (PostgreSQL, MySQL, SQL Server, etc.)")]
     end
 
     subgraph "Movie Recommendation Agent (FastAPI)"
@@ -273,8 +273,8 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/recommendations/9999?top_n=
 
 Follow this 4-step blueprint to integrate the recommendation engine into your primary backend. Since the engine communicates via a standard REST API, it is completely framework-agnostic.
 
-### Step 1: PostgreSQL Schema (Data Source)
-Create these tables in your primary backend database to feed explicit and implicit interactions to the recommendation pipeline:
+### Step 1: Database Schema (RDBMS Schema)
+Create these tables in your primary relational database (PostgreSQL, MySQL, SQL Server, SQLite, etc.) to feed explicit and implicit interactions to the recommendation pipeline:
 ```sql
 CREATE TABLE movies (
     id SERIAL PRIMARY KEY,
