@@ -1,0 +1,47 @@
+# =============================================================================
+# movie_agent .gitignore
+# =============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+
+# --- Environment ---
+.env
+!.env.example
+
+# --- Generated files (người dùng tự generate khi chạy pipeline) ---
+# Trained models (quá lớn cho git, ~5MB)
+models/svd_model.pkl
+models/*.pkl
+
+# Experiment charts (tự generate khi chạy evaluation)
+models/*.png
+models/*.csv
+models/model_metadata.json
+
+# SQLite databases (tự generate từ seed_database.py)
+data/movies.db
+data/*.db
+
+# --- Data: MovieLens dataset ---
+# GIỮ LẠI chỉ 3 file chính cần thiết (nhỏ, ~2.2MB total)
+# Bỏ qua các file test splits (không cần)
+data/ml-100k/u1.*
+data/ml-100k/u2.*
+data/ml-100k/u3.*
+data/ml-100k/u4.*
+data/ml-100k/u5.*
+data/ml-100k/ua.*
+data/ml-100k/ub.*
+data/ml-100k/allbut.pl
+data/ml-100k/mku.sh
+
+# --- IDE ---
+.vscode/
+.idea/
