@@ -24,14 +24,14 @@ graph TD
         DB_DEV[("SQLite Fallback DB")]
     end
 
-    FE -->|Interactions / Ratings| SPRING
-    SPRING -->|Write Ratings & Movies| DB_PROD
+    FE -->|"Interactions / Ratings"| SPRING
+    SPRING -->|"Write Ratings & Movies"| DB_PROD
     DB_PROD -->|"ETL (Cron Job/API)"| HYBRID
-    HYBRID -->|Train SVD & Cache| REDIS
-    HYBRID -->|Fallback Data| DB_DEV
-    SPRING -->|GET /recommendations/{userId}| FAST
-    FAST -->|Query Cache / Local Engine| HYBRID
-    FE -->|Get Recommendations| SPRING
+    HYBRID -->|"Train SVD & Cache"| REDIS
+    HYBRID -->|"Fallback Data"| DB_DEV
+    SPRING -->|"GET /recommendations/{userId}"| FAST
+    FAST -->|"Query Cache / Local Engine"| HYBRID
+    FE -->|"Get Recommendations"| SPRING
 ```
 
 > [!NOTE]
@@ -175,7 +175,7 @@ Where:
 
 #### MMR (Maximal Marginal Relevance)
 To prevent genre redundancy, the next movie $d$ added to recommendation list $S$ from candidates $R \setminus S$ is determined by:
-$$\text{MMR} = \operatorname{argmax}_{d \in R \setminus S} \left[ (1 - \lambda) \cdot \text{HybridScore}(d) + \lambda \cdot \text{Novelty}(d, S) \right]$$
+$$\text{MMR} = \arg\max_{d \in R \setminus S} \left[ (1 - \lambda) \cdot \text{HybridScore}(d) + \lambda \cdot \text{Novelty}(d, S) \right]$$
 Where:
 * $\text{Novelty}(d, S) = 1.0 - \max_{s \in S} \left( \text{Similarity}(d, s) \right)$
 * $\text{Similarity}(d, s)$ is computed using the Jaccard similarity between the genre profiles of movie $d$ and movie $s$.
