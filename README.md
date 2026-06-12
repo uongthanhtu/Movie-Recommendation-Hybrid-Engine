@@ -6,13 +6,13 @@ An enterprise-grade, high-performance hybrid movie recommendation microservice b
 
 ## 1. Core Architecture
 
-The microservice operates in a two-stage pattern: a high-recall **Candidate Generation** stage (combining SVD and popularity matrices) followed by a high-precision **Ranking and Diversification** stage.
+The microservice operates in a framework-agnostic REST pattern. The primary backend (which could be Node.js, Spring Boot, Go, Python, etc.) interacts with the FastAPI service to retrieve recommendations or trigger background training.
 
 ```mermaid
 graph TD
-    subgraph "Parent Application (Spring Boot API)"
+    subgraph "Primary Backend (Spring Boot, Node.js, Django, etc.)"
         FE["Frontend (React / Mobile)"]
-        SPRING["Spring Boot Service"]
+        BACKEND["Backend Service API"]
         DB_PROD[("PostgreSQL Database")]
     end
 
@@ -24,14 +24,14 @@ graph TD
         DB_DEV[("SQLite Fallback DB")]
     end
 
-    FE -->|"Interactions / Ratings"| SPRING
-    SPRING -->|"Write Ratings & Movies"| DB_PROD
+    FE -->|"Interactions / Ratings"| BACKEND
+    BACKEND -->|"Write Ratings & Movies"| DB_PROD
     DB_PROD -->|"ETL (Cron Job/API)"| HYBRID
     HYBRID -->|"Train SVD & Cache"| REDIS
     HYBRID -->|"Fallback Data"| DB_DEV
-    SPRING -->|"GET /recommendations/{userId}"| FAST
+    BACKEND -->|"GET /recommendations/{userId}"| FAST
     FAST -->|"Query Cache / Local Engine"| HYBRID
-    FE -->|"Get Recommendations"| SPRING
+    FE -->|"Get Recommendations"| BACKEND
 ```
 
 > [!NOTE]
@@ -269,12 +269,12 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/recommendations/9999?top_n=
 
 ---
 
-## 9. Integration Blueprints with Parent Application (Spring Boot)
+## 9. Integration Blueprints with Primary Backend (Spring Boot / Node.js)
 
-Follow this 4-step blueprint to integrate the recommendation engine into your primary backend:
+Follow this 4-step blueprint to integrate the recommendation engine into your primary backend. Since the engine communicates via a standard REST API, it is completely framework-agnostic.
 
-### Step 1: PostgreSQL Schema
-Create tables in your primary PostgreSQL database:
+### Step 1: PostgreSQL Schema (Data Source)
+Create these tables in your primary backend database to feed explicit and implicit interactions to the recommendation pipeline:
 ```sql
 CREATE TABLE movies (
     id SERIAL PRIMARY KEY,
@@ -307,8 +307,11 @@ CREATE TABLE movie_interactions (
 );
 ```
 
-### Step 2: Spring Boot REST Client
-Define a connection client to request predictions from FastAPI:
+### Step 2: REST Client Implementations
+
+Below are example connection clients for two popular backend ecosystems: **Java (Spring Boot)** and **TypeScript (Node.js)**.
+
+#### Option A: Java (Spring Boot REST Client)
 ```java
 package com.xiangqi.recommendation.client;
 
@@ -371,8 +374,59 @@ public class RecommendationClient {
 }
 ```
 
+#### Option B: TypeScript (Node.js REST Client)
+```typescript
+import axios from 'axios';
+
+interface MovieRecommendation {
+  movie_id: number;
+  title: string;
+  predicted_rating: number;
+  genres: string[];
+  hybrid_score: number | null;
+}
+
+interface RecommendationResponse {
+  user_id: number;
+  recommendations: MovieRecommendation[];
+  source: string;
+  user_type: string;
+  latency_ms: number;
+}
+
+const API_URL = process.env.RECOMMENDATION_API_URL || 'http://localhost:8000';
+
+export async function getRecommendations(
+  userId: number,
+  topN: number = 10,
+  preferGenres?: string
+): Promise<RecommendationResponse> {
+  try {
+    const response = await axios.get<RecommendationResponse>(
+      `${API_URL}/api/v1/recommendations/${userId}`,
+      {
+        params: { top_n: topN, prefer_genres: preferGenres }
+      }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.warn(`Recommendation fallback triggered: ${error.message}`);
+    return {
+      user_id: userId,
+      recommendations: [],
+      source: 'node_emergency_fallback',
+      user_type: 'emergency',
+      latency_ms: 0
+    };
+  }
+}
+```
+
 ### Step 3: Implicit Interaction Logging
-Convert video watching progress percentages into explicit SVD ratings on-the-fly:
+
+Whenever a user watches a movie, convert their video watch completion percentage into an implicit rating score:
+
+#### Java (Spring Boot)
 ```java
 public void onUserFinishVideo(Long userId, Integer movieId, int watchPercent) {
     if (watchPercent >= 90) {
@@ -383,8 +437,22 @@ public void onUserFinishVideo(Long userId, Integer movieId, int watchPercent) {
 }
 ```
 
-### Step 4: Scheduled Training (Spring Boot Scheduler Trigger)
-Trigger the training pipeline at 2:00 AM daily:
+#### TypeScript (Node.js)
+```typescript
+export function onUserFinishVideo(userId: number, movieId: number, watchPercent: number) {
+  if (watchPercent >= 90) {
+    saveOrUpdateImplicitRating(userId, movieId, 5.0);
+  } else if (watchPercent >= 50) {
+    saveOrUpdateImplicitRating(userId, movieId, 3.5);
+  }
+}
+```
+
+### Step 4: Scheduled Training Trigger
+
+Choose the scheduling tool suitable for your language environment to trigger the model training pipeline daily at 2:00 AM:
+
+#### Java (Spring Boot Scheduler)
 ```java
 @Scheduled(cron = "0 0 2 * * ?")
 public void triggerModelRetraining() {
@@ -396,6 +464,22 @@ public void triggerModelRetraining() {
         System.err.println("Failed to trigger model retraining: " + e.getMessage());
     }
 }
+```
+
+#### TypeScript (Node.js Cron Job)
+```typescript
+import cron from 'node-cron';
+import axios from 'axios';
+
+// Trigger retraining pipeline at 2:00 AM daily
+cron.schedule('0 2 * * *', async () => {
+  try {
+    await axios.post(`${API_URL}/api/v1/pipeline/train?skip_benchmark=true`);
+    console.log('Model retraining triggered successfully.');
+  } catch (error: any) {
+    console.error(`Failed to trigger model retraining: ${error.message}`);
+  }
+});
 ```
 
 ---
