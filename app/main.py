@@ -137,7 +137,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown logic."""
     global redis_client, svd_model, hybrid_engine, ratings_df, movies_df
 
-    print("🚀 Starting Movie Recommendation API (Hybrid Mode)...")
+    print("Starting Movie Recommendation API (Hybrid Mode)...")
 
     # 1. Connect to Redis
     try:
@@ -149,10 +149,10 @@ async def lifespan(app: FastAPI):
             socket_connect_timeout=3,
         )
         redis_client.ping()
-        print(f"  ✅ Redis connected: {settings.redis_host}:{settings.redis_port}")
+        print(f"  Redis connected: {settings.redis_host}:{settings.redis_port}")
     except (redis.ConnectionError, redis.TimeoutError):
         redis_client = None
-        print(f"  ⚠️  Redis not available — running in degraded mode (no cache)")
+        print(f"  Redis not available — running in degraded mode (no cache)")
 
     # 2. Load SVD model
     model_path = os.path.join(settings.model_dir, "svd_model.pkl")
@@ -160,21 +160,21 @@ async def lifespan(app: FastAPI):
         try:
             with open(model_path, "rb") as f:
                 svd_model = pickle.load(f)
-            print(f"  ✅ SVD model loaded: {model_path}")
+            print(f"  SVD model loaded: {model_path}")
         except Exception as e:
             svd_model = None
-            print(f"  ⚠️  Failed to load SVD model: {e}")
+            print(f"  Failed to load SVD model: {e}")
     else:
-        print(f"  ⚠️  No SVD model at {model_path}")
+        print(f"  No SVD model at {model_path}")
 
     # 3. Load data for hybrid engine
     try:
         from pipeline.data_loader import load_ratings, load_movies
         ratings_df = load_ratings(settings.data_dir)
         movies_df = load_movies(settings.data_dir)
-        print(f"  ✅ Data loaded: {len(ratings_df):,} ratings, {len(movies_df):,} movies")
+        print(f"  Data loaded: {len(ratings_df):,} ratings, {len(movies_df):,} movies")
     except Exception as e:
-        print(f"  ⚠️  Failed to load data: {e}")
+        print(f"  Failed to load data: {e}")
         ratings_df = None
         movies_df = None
 
@@ -185,19 +185,19 @@ async def lifespan(app: FastAPI):
             hybrid_engine = HybridRecommender(
                 svd_model, ratings_df, movies_df, verbose=True,
             )
-            print(f"  ✅ Hybrid engine initialized (5 signals)")
+            print(f"  Hybrid engine initialized (5 signals)")
         except Exception as e:
             hybrid_engine = None
-            print(f"  ⚠️  Hybrid engine failed: {e}")
+            print(f"  Hybrid engine failed: {e}")
     else:
-        print(f"  ⚠️  Hybrid engine not initialized (missing model or data)")
+        print(f"  Hybrid engine not initialized (missing model or data)")
 
     yield
 
     # Shutdown
     if redis_client:
         redis_client.close()
-    print("👋 API shutdown complete.")
+    print("API shutdown complete.")
 
 
 # =============================================================================
@@ -205,7 +205,7 @@ async def lifespan(app: FastAPI):
 # =============================================================================
 
 app = FastAPI(
-    title="🎬 Movie Recommendation API",
+    title="Movie Recommendation API",
     description=(
         "Hybrid movie recommendation microservice.\n\n"
         "**5 Signals:** SVD (50%) + Content-Based (25%) + Recent Taste (10%) "
@@ -469,7 +469,7 @@ async def get_recommendations(
                 latency_ms=round(latency, 2),
             )
         except Exception as e:
-            print(f"⚠️ Hybrid failed for user {user_id}: {e}")
+            print(f"Warning: Hybrid failed for user {user_id}: {e}")
             # Fall through to next case
 
     # ─────────────────────────────────────────────────────────
@@ -514,7 +514,7 @@ async def get_recommendations(
                 latency_ms=round(latency, 2),
             )
         except Exception as e:
-            print(f"⚠️ Content-boosted failed for user {user_id}: {e}")
+            print(f"Warning: Content-boosted failed for user {user_id}: {e}")
 
     # ─────────────────────────────────────────────────────────
     # CASE 3: Cold start (0 ratings) → Popular by genre or global
@@ -578,7 +578,7 @@ async def get_recommendations(
                     latency_ms=round(latency, 2),
                 )
         except Exception as e:
-            print(f"⚠️ SVD fallback failed: {e}")
+            print(f"Warning: SVD fallback failed: {e}")
 
     # ─────────────────────────────────────────────────────────
     # CASE 5: Everything failed → global popular from SQLite
@@ -892,7 +892,7 @@ async def trigger_training(
                 f"Pipeline completed in {result['pipeline_time']:.1f}s. "
                 f"RMSE: {result['metrics']['rmse_mean']}. "
                 f"Users: {result['top_n_count']}. "
-                f"⚠️ Restart server to reload hybrid engine."
+                f"Restart server to reload hybrid engine."
             ),
         )
     except Exception as e:

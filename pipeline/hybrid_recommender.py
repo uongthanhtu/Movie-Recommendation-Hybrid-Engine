@@ -68,7 +68,7 @@ class HybridRecommender:
 
         # Pre-compute content features
         if verbose:
-            print("\n🔧 Initializing Hybrid Recommender...")
+            print("\nInitializing Hybrid Recommender...")
 
         self.genre_matrix, self.movie_id_to_idx = build_movie_genre_matrix(movies_df)
         self.idx_to_movie_id = {v: k for k, v in self.movie_id_to_idx.items()}
@@ -97,7 +97,7 @@ class HybridRecommender:
             print(f"   ├── Genre matrix: {self.genre_matrix.shape}")
             print(f"   ├── Popularity: {len(self.popularity_map)} movies")
             print(f"   ├── Weights: {self.weights}")
-            print(f"   └── ✅ Ready")
+            print(f"   └── Ready")
 
     def get_user_profile(self, user_id: int) -> dict:
         """Get comprehensive user profile including genre preferences."""
@@ -359,7 +359,7 @@ def generate_hybrid_top_n(
     Returns: {user_id: [{"movie_id": ..., "hybrid_score": ..., ...}, ...]}
     """
     if verbose:
-        print(f"\n📋 Generating Hybrid Top-{n} recommendations for all users...")
+        print(f"\nGenerating Hybrid Top-{n} recommendations for all users...")
 
     start = time.time()
 
@@ -382,7 +382,7 @@ def generate_hybrid_top_n(
     elapsed = time.time() - start
 
     if verbose:
-        print(f"\n   ✅ Hybrid recommendations generated")
+        print(f"\n   Hybrid recommendations generated")
         print(f"   Users: {len(results)}")
         print(f"   Time: {elapsed:.1f}s")
         if 1 in results:

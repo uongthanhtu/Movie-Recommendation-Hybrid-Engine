@@ -122,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_movies_source ON movies(source);
 def seed_sqlite(data_dir: str, db_path: str):
     """Seed SQLite database with MovieLens-100k data."""
     print("=" * 70)
-    print("🌱 SEEDING SQLite DATABASE")
+    print("SEEDING SQLite DATABASE")
     print(f"   Source:  {os.path.abspath(data_dir)}")
     print(f"   Target:  {os.path.abspath(db_path)}")
     print("=" * 70)
@@ -151,7 +151,7 @@ def seed_sqlite(data_dir: str, db_path: str):
     conn.execute("DELETE FROM recommendation_users WHERE source = 'movielens'")
 
     # Insert movies
-    print("\n  📽️  Inserting movies...")
+    print("\n  Inserting movies...")
     movies_data = []
     for _, row in movies.iterrows():
         movies_data.append((
@@ -172,7 +172,7 @@ def seed_sqlite(data_dir: str, db_path: str):
 
     # Insert users
     if not users.empty:
-        print("  👤 Inserting users...")
+        print("  Inserting users...")
         users_data = []
         for _, row in users.iterrows():
             users_data.append((
@@ -190,7 +190,7 @@ def seed_sqlite(data_dir: str, db_path: str):
         print(f"     Inserted {len(users_data):,} users")
 
     # Insert ratings
-    print("  ⭐ Inserting ratings...")
+    print("  Inserting ratings...")
     ratings_data = []
     for _, row in ratings.iterrows():
         ts = datetime.fromtimestamp(row["timestamp"]).isoformat() if pd.notna(row.get("timestamp")) else None
@@ -219,7 +219,7 @@ def seed_sqlite(data_dir: str, db_path: str):
     elapsed = time.time() - start
 
     print(f"\n{'=' * 70}")
-    print("✅ SEED COMPLETE!")
+    print("SEED COMPLETE!")
     print(f"   Movies:   {n_movies:,}")
     print(f"   Users:    {n_users:,}")
     print(f"   Ratings:  {n_ratings:,}")
@@ -240,7 +240,7 @@ def seed_postgres(data_dir: str, pg_url: str):
         sys.exit(1)
 
     print("=" * 70)
-    print("🌱 SEEDING PostgreSQL DATABASE")
+    print("SEEDING PostgreSQL DATABASE")
     print(f"   Source:  {os.path.abspath(data_dir)}")
     print(f"   Target:  {pg_url.split('@')[-1] if '@' in pg_url else pg_url}")
     print("=" * 70)
@@ -264,7 +264,7 @@ def seed_postgres(data_dir: str, pg_url: str):
     cur.execute("DELETE FROM recommendation_users WHERE source = 'movielens'")
 
     # Insert movies
-    print("\n  📽️  Inserting movies...")
+    print("\n  Inserting movies...")
     for _, row in movies.iterrows():
         cur.execute(
             """INSERT INTO movies (id, title, release_date, genres, source)
@@ -278,7 +278,7 @@ def seed_postgres(data_dir: str, pg_url: str):
 
     # Insert users
     if not users.empty:
-        print("  👤 Inserting users...")
+        print("  Inserting users...")
         for _, row in users.iterrows():
             cur.execute(
                 """INSERT INTO recommendation_users (id, external_id, age, gender, occupation, source)
@@ -291,7 +291,7 @@ def seed_postgres(data_dir: str, pg_url: str):
         print(f"     Inserted {len(users):,} users")
 
     # Insert ratings
-    print("  ⭐ Inserting ratings...")
+    print("  Inserting ratings...")
     for _, row in ratings.iterrows():
         ts = datetime.fromtimestamp(row["timestamp"]) if pd.notna(row.get("timestamp")) else None
         cur.execute(
@@ -317,7 +317,7 @@ def seed_postgres(data_dir: str, pg_url: str):
     elapsed = time.time() - start
 
     print(f"\n{'=' * 70}")
-    print("✅ SEED COMPLETE!")
+    print("SEED COMPLETE!")
     print(f"   Movies:   {n_movies:,}")
     print(f"   Users:    {n_users:,}")
     print(f"   Ratings:  {n_ratings:,}")

@@ -65,7 +65,7 @@ def run_pipeline(
     pipeline_start = time.time()
 
     print("=" * 70)
-    print("🎬 MOVIE RECOMMENDATION PIPELINE")
+    print("MOVIE RECOMMENDATION PIPELINE")
     print(f"   Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 70)
 
@@ -73,20 +73,20 @@ def run_pipeline(
     # STEP 1: Load Data
     # =========================================================================
     print("\n" + "─" * 70)
-    print("📊 STEP 1: Loading Data")
+    print("STEP 1: Loading Data")
     print("─" * 70)
 
     if data_source == "database":
         # Production mode: read from database
         if pg_url:
-            print("  📡 Source: PostgreSQL (production)")
+            print("  Source: PostgreSQL (production)")
             ratings, movies, stats = extract_from_postgres(pg_url)
         else:
-            print(f"  📡 Source: SQLite ({db_path})")
+            print(f"  Source: SQLite ({db_path})")
             ratings, movies, stats = extract_from_sqlite(db_path)
     else:
         # Demo mode: read from MovieLens files
-        print(f"  📁 Source: MovieLens files ({data_dir})")
+        print(f"  Source: MovieLens files ({data_dir})")
         ratings, movies, stats = load_all(data_dir, save_db=True, db_path=db_path)
 
     data = build_surprise_data(ratings)
@@ -97,7 +97,7 @@ def run_pipeline(
     benchmark_df = None
     if not skip_benchmark:
         print("\n" + "─" * 70)
-        print("📊 STEP 2: Algorithm Benchmark (SVD vs KNN vs NMF)")
+        print("STEP 2: Algorithm Benchmark (SVD vs KNN vs NMF)")
         print("─" * 70)
         benchmark_df = benchmark_all_algorithms(data)
 
@@ -105,15 +105,15 @@ def run_pipeline(
         os.makedirs(model_dir, exist_ok=True)
         benchmark_path = os.path.join(model_dir, "benchmark_results.csv")
         benchmark_df.to_csv(benchmark_path, index=False)
-        print(f"\n  💾 Benchmark saved: {benchmark_path}")
+        print(f"\n  Benchmark saved: {benchmark_path}")
     else:
-        print("\n⏭️  Skipping benchmark (--skip-benchmark)")
+        print("\nSkipping benchmark (--skip-benchmark)")
 
     # =========================================================================
     # STEP 3: Train Best SVD Model
     # =========================================================================
     print("\n" + "─" * 70)
-    print("🤖 STEP 3: Training SVD Model")
+    print("STEP 3: Training SVD Model")
     print("─" * 70)
 
     if not skip_gridsearch:
@@ -123,7 +123,7 @@ def run_pipeline(
         # Save GridSearch results
         gs_path = os.path.join(model_dir, "gridsearch_results.csv")
         gs_results.to_csv(gs_path, index=False)
-        print(f"  💾 GridSearch results saved: {gs_path}")
+        print(f"  GridSearch results saved: {gs_path}")
 
         # Re-train on full data with best params
         algo, trainset, metrics = train_svd(
@@ -147,15 +147,15 @@ def run_pipeline(
     try:
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=4)
-        print(f"  💾 Local model metadata saved: {metadata_path}")
+        print(f"  Local model metadata saved: {metadata_path}")
     except Exception as e:
-        print(f"  ⚠️ Failed to save model metadata: {e}")
+        print(f"  Failed to save model metadata: {e}")
 
     # =========================================================================
     # STEP 4: Generate Recommendations
     # =========================================================================
     print("\n" + "─" * 70)
-    print("📋 STEP 4: Generating Recommendations")
+    print("STEP 4: Generating Recommendations")
     print("─" * 70)
 
     top_n_recs = generate_top_n(algo, trainset, n=top_n)
@@ -165,11 +165,11 @@ def run_pipeline(
     # STEP 5: Push to Redis
     # =========================================================================
     print("\n" + "─" * 70)
-    print("⚡ STEP 5: Pushing to Redis")
+    print("STEP 5: Pushing to Redis")
     print("─" * 70)
 
     if no_redis:
-        print("  ⏭️  Skipping Redis push (--no-redis)")
+        print("  Skipping Redis push (--no-redis)")
         n_pushed = 0
     else:
         r = get_redis_client(redis_host, redis_port, redis_db)
@@ -180,8 +180,8 @@ def run_pipeline(
             push_model_metadata(r, metrics, n_pushed, ttl=cache_ttl)
         else:
             n_pushed = 0
-            print("  ⚠️  Redis not available. Recommendations generated but not cached.")
-            print("  💡 Start Redis: docker-compose up redis -d")
+            print("  Redis not available. Recommendations generated but not cached.")
+            print("  Start Redis: docker-compose up redis -d")
 
     # =========================================================================
     # SUMMARY
@@ -189,7 +189,7 @@ def run_pipeline(
     pipeline_time = time.time() - pipeline_start
 
     print("\n" + "=" * 70)
-    print("✅ PIPELINE COMPLETE!")
+    print("PIPELINE COMPLETE!")
     print("=" * 70)
     print(f"   Dataset:        MovieLens-100k ({stats['n_ratings']:,} ratings)")
     print(f"   Algorithm:      SVD (n_factors={metrics.get('n_factors', '?')})")

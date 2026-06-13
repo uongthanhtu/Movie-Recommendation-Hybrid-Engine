@@ -38,36 +38,36 @@ def run_cmd(cmd: list, cwd: str = MOVIE_AGENT_DIR):
 def step_install_deps():
     """Step 1: Install Python dependencies."""
     print("\n" + "=" * 60)
-    print("📦 Step 1/4: Installing dependencies...")
+    print("Step 1/4: Installing dependencies...")
     print("=" * 60)
 
     req_file = os.path.join(MOVIE_AGENT_DIR, "requirements.txt")
     run_cmd([sys.executable, "-m", "pip", "install", "-r", req_file, "-q"])
-    print("  ✅ Dependencies installed")
+    print("  Dependencies installed")
 
 
 def step_check_data():
     """Step 2: Verify MovieLens-100k data exists."""
     print("\n" + "=" * 60)
-    print("📊 Step 2/4: Checking MovieLens-100k data...")
+    print("Step 2/4: Checking MovieLens-100k data...")
     print("=" * 60)
 
     required_files = ["u.data", "u.item", "u.user"]
     missing = [f for f in required_files if not os.path.exists(os.path.join(DATA_DIR, f))]
 
     if not missing:
-        print("  ✅ MovieLens-100k data found")
+        print("  MovieLens-100k data found")
         return
 
-    print(f"  ⚠️  Missing files: {missing}")
-    print(f"  📥 Downloading MovieLens-100k from {MOVIELENS_URL}...")
+    print(f"  Missing files: {missing}")
+    print(f"  Downloading MovieLens-100k from {MOVIELENS_URL}...")
 
     os.makedirs(DATA_DIR, exist_ok=True)
     zip_path = os.path.join(MOVIE_AGENT_DIR, "data", "ml-100k.zip")
 
     try:
         urllib.request.urlretrieve(MOVIELENS_URL, zip_path)
-        print("  📦 Extracting...")
+        print("  Extracting...")
 
         with zipfile.ZipFile(zip_path, "r") as z:
             # Extract to temp then move
@@ -86,11 +86,11 @@ def step_check_data():
             shutil.rmtree(temp_dir, ignore_errors=True)
 
         os.remove(zip_path)
-        print("  ✅ MovieLens-100k downloaded and extracted")
+        print("  MovieLens-100k downloaded and extracted")
 
     except Exception as e:
-        print(f"  ❌ Download failed: {e}")
-        print(f"  💡 Manual download: {MOVIELENS_URL}")
+        print(f"  Download failed: {e}")
+        print(f"  Manual download: {MOVIELENS_URL}")
         print(f"     Extract to: {DATA_DIR}")
         sys.exit(1)
 
@@ -98,7 +98,7 @@ def step_check_data():
 def step_seed_db():
     """Step 3: Seed SQLite database."""
     print("\n" + "=" * 60)
-    print("🌱 Step 3/4: Seeding database...")
+    print("Step 3/4: Seeding database...")
     print("=" * 60)
 
     run_cmd([
@@ -111,7 +111,7 @@ def step_seed_db():
 def step_train():
     """Step 4: Train SVD model."""
     print("\n" + "=" * 60)
-    print("🤖 Step 4/4: Training SVD model...")
+    print("Step 4/4: Training SVD model...")
     print("=" * 60)
 
     run_cmd([
@@ -126,7 +126,7 @@ def step_train():
 
 def main():
     print("=" * 60)
-    print("🎬 Movie Recommendation Service — Quick Setup")
+    print("Movie Recommendation Service — Quick Setup")
     print("=" * 60)
     print(f"  Python:  {sys.version.split()[0]}")
     print(f"  Dir:     {MOVIE_AGENT_DIR}")
@@ -137,7 +137,7 @@ def main():
     step_train()
 
     print("\n" + "=" * 60)
-    print("🎉 SETUP COMPLETE!")
+    print("SETUP COMPLETE!")
     print("=" * 60)
     print()
     print("  Start the API server:")
