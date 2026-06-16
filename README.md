@@ -96,7 +96,6 @@ M_{i,j} = \begin{cases} 0 & \text{if } i \ge j \\ -\infty & \text{if } i < j \en
 $$
 
 ### 4.3. Social-LightGCN Graph Collaborative Filtering with Social Trust Graph (Proposed Model)
-
 Our custom proposed model, **Social-LightGCN**, integrates collaborative signals and social networks directly at the graph propagation layer (Early Fusion) instead of blending scores at the API level (Late Fusion).
 
 #### Early-Fusion Embedding Propagation
@@ -160,11 +159,9 @@ where $s_{uv}$ represents Jaccard trust network weights between users $u$ and $v
 ---
 
 ## 5. Algorithmic Theories, References & Custom Enhancements
-
 This microservice adapts classic and state-of-the-art recommender system literature for modern, real-time Web API architectures. All foundational mathematical formulations are verified against their original peer-reviewed publications.
 
 ### 5.1. Reference Documents & Literature (Academic Bibliography)
-
 1. **MovieLens Datasets & Sparsity Dynamics**
    * *Reference:* F. M. Harper and J. A. Konstan, "The MovieLens Datasets: History and Context," *ACM Transactions on Interactive Intelligent Systems (TiiS)*, vol. 5, no. 4, pp. 1–19, 2015.
    * *Extracted Concepts:* Tab-separated transaction profiles, 19-dimensional multi-hot genre vector arrays, and leaves-last-one-out statistical partitioning protocols.
@@ -189,12 +186,16 @@ This microservice adapts classic and state-of-the-art recommender system literat
    * *Reference:* G. Guo, J. Zhang, and D. Thalmann, "TrustSVD: Collaborative filtering with both explicit and implicit trust networks," in *Proceedings of the 21st ACM SIGKDD International Conference on Knowledge Discovery and Data Mining*, 2015, pp. 393–402.
    * *Extracted Concepts:* Integration of implicit trust networks generated via Jaccard structural overlap metrics to regularize latent feature space projections of sparse users.
 
+7. **Adaptive Multi-Task Learning via Uncertainty**
+   * *Reference:* A. Kendall, Y. Gal, and R. Cipolla, "Multi-Task Learning Using Uncertainty to Weigh Losses for Scene Geometry and Semantics," in *Proceedings of the IEEE CVPR*, 2018.
+   * *Extracted Concepts:* Utilizing homoscedastic task-dependent uncertainty to dynamically weight multiple loss functions (BPR, Rating MSE, Social MSE), preventing task domination by learning log-variance parameters during backpropagation.
+
 ---
 
 ## 6. Adaptive Fallback Chain & User Classification
 The microservice handles request failures elegantly via a 6-layer high-availability fallback design:
 
-```
+```text
 [Incoming Request]
         │
         ▼
@@ -212,9 +213,9 @@ The microservice handles request failures elegantly via a 6-layer high-availabil
            │                                  ├───────────────────────┤
            │                                  │ Unknown (No ID/Data)  │ ──▶ Global Popular Fallback
            ▼                                  └───────────────────────┘
-┌─────────────────────────┐   Success         ┌───────────────────────┐
-│ Local LightGCN Inference├──────────────────▶│ Return Graph Pred     │ (~0.53ms)
-└──────┬──────────────────┘                   └───────────────────────┘
+┌─────────────────────────────────┐   Success ┌───────────────────────┐
+│ Local Social-LightGCN Inference ├──────────▶│ Return Graph Pred     │ (~0.23ms)
+└──────┬──────────────────────────┘           └───────────────────────┘
        │ Missing Model
        ▼
 ┌─────────────────────────┐   Success         ┌───────────────────────┐
@@ -242,6 +243,7 @@ movie_agent/
 │   │   ├── funk_svd_engine.py       # Funk-SVD baseline engine wrapper
 │   │   ├── trust_svd_engine.py      # PyTorch sparse social TrustSVD engine
 │   │   ├── lightgcn_engine.py       # PyTorch Graph Collaborative Filtering engine
+│   │   ├── social_lightgcn_engine.py# PyTorch early-fusion social LightGCN engine
 │   │   ├── sasrec_engine.py         # PyTorch Sequential Transformer engine
 │   │   ├── unified_data_loader.py   # Unified ETL pipeline generating all 4 engine formats
 │   │   └── benchmark_arena.py       # Online/Offline training & evaluation coordinator
@@ -257,29 +259,34 @@ movie_agent/
 
 ## 8. Quick Start Guide
 
-### 7.1. Install Dependencies
+### 8.1. Install Dependencies
 Make sure you have Python 3.10+ installed:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 7.2. Run Automatic Setup Script
+### 8.2. Run Automatic Setup Script
 The [setup.py](./setup.py) script automatically downloads datasets, creates local databases, and trains the SVD baseline weights:
+
 ```bash
 python setup.py
 ```
 
-### 7.3. Run the Multi-Engine Benchmark Arena
-To train and evaluate all four engines (Funk-SVD, TrustSVD, LightGCN, and SASRec) on the same dataset split and compare ranking metrics:
+### 8.3. Run the Multi-Engine Benchmark Arena
+To train and evaluate all engines (Funk-SVD, TrustSVD, LightGCN, Social-LightGCN, and SASRec) on the same dataset split and compare ranking metrics:
+
 ```bash
 py -m pipeline.engines.benchmark_arena
 ```
 
-### 7.4. Start API Server
+### 8.4. Start API Server
 Run the FastAPI application locally:
+
 ```bash
 python -m app.main
 ```
+
 The server will start on **http://localhost:8000** with automatic degraded mode support if Redis is unavailable.
 
 ---
@@ -301,25 +308,24 @@ The server will start on **http://localhost:8000** with automatic degraded mode 
 ---
 
 ## 10. QA Verification & Local API Testing
-
 Execute these PowerShell commands to verify all endpoints:
 
-### Step 1: System Health Verification
+### 10.1. System Health Verification
 ```powershell
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" | ConvertTo-Json
 ```
 
-### Step 2: Test Personalized recommendations (User 1)
+### 10.2. Test Personalized Recommendations (User 1)
 ```powershell
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/recommendations/1?top_n=5" | ConvertTo-Json -Depth 5
 ```
 
-### Step 3: Test Recommendation Explanation
+### 10.3. Test Recommendation Explanation
 ```powershell
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/recommendations/1/explain/652" | ConvertTo-Json -Depth 5
 ```
 
-### Step 4: Test Cold-Start with New User (User 9999)
+### 10.4. Test Cold-Start with New User (User 9999)
 ```powershell
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/recommendations/9999?top_n=5&prefer_genres=Action,Sci-Fi" | ConvertTo-Json -Depth 5
 ```
@@ -327,11 +333,11 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/recommendations/9999?top_n=
 ---
 
 ## 11. Integration Blueprints with Primary Backend (Spring Boot / Node.js)
-
 Since the microservice communicates via a standard REST API, it is completely framework-agnostic.
 
-### Step 1: Database Schema (RDBMS Schema)
+### 11.1. Database Schema (RDBMS Schema)
 Create these tables in your primary database to sync ratings and implicit interactions:
+
 ```sql
 CREATE TABLE movies (
     id SERIAL PRIMARY KEY,
@@ -364,7 +370,7 @@ CREATE TABLE movie_interactions (
 );
 ```
 
-### Step 2: REST Client Implementations
+### 11.2. REST Client Implementations
 
 #### Java (Spring Boot REST Client)
 ```java
@@ -477,7 +483,7 @@ export async function getRecommendations(
 }
 ```
 
-### Step 3: Implicit Interaction Logging
+### 11.3. Implicit Interaction Logging
 Convert video watch completion percentage into implicit rating scores:
 
 #### Java (Spring Boot)
@@ -502,7 +508,7 @@ export function onUserFinishVideo(userId: number, movieId: number, watchPercent:
 }
 ```
 
-### Step 4: Scheduled Training Trigger
+### 11.4. Scheduled Training Trigger
 Trigger the model retraining pipeline daily at 2:00 AM:
 
 #### Java (Spring Boot Scheduler)
@@ -537,8 +543,8 @@ cron.schedule('0 2 * * *', async () => {
 ---
 
 ## 12. Deployment with Docker
-
 Start API and Redis services using Docker Compose:
+
 ```bash
 docker-compose up -d
 ```
@@ -546,5 +552,4 @@ docker-compose up -d
 ---
 
 ## 13. License
-
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
