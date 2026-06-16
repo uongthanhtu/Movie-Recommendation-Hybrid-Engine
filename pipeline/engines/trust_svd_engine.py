@@ -274,6 +274,38 @@ class TrustSVDEngine(BaseRecommenderEngine):
             )
         return float(np.clip(pred, 1.0, 5.0))
 
+    def predict_batch(self, user_id: int, item_ids: List[int]) -> np.ndarray:
+        """
+        Predict ratings for a batch of item IDs for a given user.
+        Vectorized in PyTorch/NumPy.
+        """
+        if user_id >= self.num_users or not item_ids:
+            return np.full(len(item_ids), float(self.mu), dtype=np.float32)
+
+        # Handle out of range item IDs safely
+        valid_item_ids = [min(item_id, self.num_items - 1) for item_id in item_ids]
+
+        self.model.eval()
+        with torch.no_grad():
+            p_star = self._user_emb_cached[user_id].to(self.device)  # (K,)
+            q_items = self.model.q.weight[valid_item_ids]          # (B, K)
+
+            user_bias = self.model.u_bias.weight[user_id].item()
+            item_biases = self.model.i_bias.weight[valid_item_ids].view(-1)  # (B,)
+
+            dot = torch.matmul(q_items, p_star)  # (B,)
+            preds = self.mu + user_bias + item_biases + dot  # (B,)
+
+            preds = torch.clamp(preds, 1.0, 5.0)
+            preds_np = preds.cpu().numpy()
+
+            # Handle fallback for items that were out of range
+            for idx, item_id in enumerate(item_ids):
+                if item_id >= self.num_items:
+                    preds_np[idx] = float(self.mu)
+
+        return preds_np
+
     def recommend_top_n(self, user_id: int, top_n: int = 10) -> List[int]:
         if user_id >= self.num_users:
             return list(range(min(top_n, self.num_items)))

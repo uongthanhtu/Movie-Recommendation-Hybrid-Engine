@@ -122,7 +122,9 @@ class TrainResponse(BaseModel):
 # =============================================================================
 
 redis_client: Optional[redis.Redis] = None
-svd_model = None
+lightgcn_model = None
+trust_svd_model = None
+id_mappings = None
 hybrid_engine = None  # HybridRecommender instance
 ratings_df: Optional[pd.DataFrame] = None
 movies_df: Optional[pd.DataFrame] = None
@@ -135,7 +137,7 @@ movies_df: Optional[pd.DataFrame] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown logic."""
-    global redis_client, svd_model, hybrid_engine, ratings_df, movies_df
+    global redis_client, lightgcn_model, trust_svd_model, id_mappings, hybrid_engine, ratings_df, movies_df
 
     print("Starting Movie Recommendation API (Hybrid Mode)...")
 
@@ -152,20 +154,60 @@ async def lifespan(app: FastAPI):
         print(f"  Redis connected: {settings.redis_host}:{settings.redis_port}")
     except (redis.ConnectionError, redis.TimeoutError):
         redis_client = None
-        print(f"  Redis not available — running in degraded mode (no cache)")
+        print("  Redis not available — running in degraded mode (no cache)")
 
-    # 2. Load SVD model
-    model_path = os.path.join(settings.model_dir, "svd_model.pkl")
-    if os.path.exists(model_path):
+    # 2. Load ID Mappings
+    id_mappings_path = os.path.join(settings.model_dir, "id_mappings.pkl")
+    if os.path.exists(id_mappings_path):
         try:
-            with open(model_path, "rb") as f:
-                svd_model = pickle.load(f)
-            print(f"  SVD model loaded: {model_path}")
+            with open(id_mappings_path, "rb") as f:
+                id_mappings = pickle.load(f)
+            print(f"  ID mappings loaded: {id_mappings_path}")
         except Exception as e:
-            svd_model = None
-            print(f"  Failed to load SVD model: {e}")
+            id_mappings = None
+            print(f"  Failed to load ID mappings: {e}")
     else:
-        print(f"  No SVD model at {model_path}")
+        id_mappings = None
+        print(f"  No ID mappings at {id_mappings_path}")
+
+    # Load LightGCN model
+    lightgcn_model = None
+    lightgcn_path = os.path.join(settings.model_dir, "lightgcn_model.pth")
+    if id_mappings is not None and os.path.exists(lightgcn_path):
+        try:
+            from pipeline.engines.lightgcn_engine import LightGCNEngine
+            num_users = len(id_mappings["user_idx_to_raw"])
+            num_items = len(id_mappings["item_idx_to_raw"])
+            lightgcn_model = LightGCNEngine(
+                num_users=num_users,
+                num_items=num_items,
+                embedding_dim=64,
+                num_layers=3,
+            )
+            lightgcn_model.load_model(lightgcn_path)
+            print(f"  LightGCN model loaded: {lightgcn_path}")
+        except Exception as e:
+            lightgcn_model = None
+            print(f"  Failed to load LightGCN model: {e}")
+    else:
+        print(f"  No LightGCN model loaded (path: {lightgcn_path})")
+
+    # Load TrustSVD model
+    trust_svd_model = None
+    trust_svd_path = os.path.join(settings.model_dir, "trust_svd_model.pth")
+    if id_mappings is not None and os.path.exists(trust_svd_path):
+        try:
+            from pipeline.engines.trust_svd_engine import TrustSVDEngine
+            trust_svd_model = TrustSVDEngine(
+                n_factors=50,
+            )
+            trust_svd_model.load_model(trust_svd_path)
+            print(f"  TrustSVD model loaded: {trust_svd_path}")
+        except Exception as e:
+            trust_svd_model = None
+            print(f"  Failed to load TrustSVD model: {e}")
+    else:
+        print(f"  No TrustSVD model loaded (path: {trust_svd_path})")
 
     # 3. Load data for hybrid engine
     try:
@@ -179,18 +221,18 @@ async def lifespan(app: FastAPI):
         movies_df = None
 
     # 4. Initialize Hybrid Engine
-    if svd_model is not None and ratings_df is not None and movies_df is not None:
+    if lightgcn_model is not None and trust_svd_model is not None and id_mappings is not None and ratings_df is not None and movies_df is not None:
         try:
             from pipeline.hybrid_recommender import HybridRecommender
             hybrid_engine = HybridRecommender(
-                svd_model, ratings_df, movies_df, verbose=True,
+                lightgcn_model, trust_svd_model, id_mappings, ratings_df, movies_df, verbose=True,
             )
-            print(f"  Hybrid engine initialized (5 signals)")
+            print("  Hybrid engine initialized (5 signals: LightGCN + TrustSVD core)")
         except Exception as e:
             hybrid_engine = None
             print(f"  Hybrid engine failed: {e}")
     else:
-        print(f"  Hybrid engine not initialized (missing model or data)")
+        print("  Hybrid engine not initialized (missing model or data)")
 
     yield
 
@@ -454,7 +496,7 @@ async def get_recommendations(
                 MovieRecommendation(
                     movie_id=r["movie_id"],
                     title=r["title"],
-                    predicted_rating=r["svd_pred"],
+                    predicted_rating=r.get("predicted_rating", r.get("svd_pred", 0.0)),
                     genres=r["genres"],
                     hybrid_score=r["hybrid_score"],
                 )
@@ -480,10 +522,10 @@ async def get_recommendations(
             # Use hybrid with boosted content weights
             from pipeline.hybrid_recommender import HybridRecommender
             boosted_weights = {
-                "svd": 0.25,        # Reduce SVD (not reliable with few ratings)
-                "content": 0.40,    # Boost content matching
-                "recent": 0.15,     # Recent taste matters more
-                "popularity": 0.15, # Lean on popularity
+                "lightgcn": 0.25,
+                "trust_svd": 0.15,
+                "content": 0.45,
+                "recent": 0.10,
                 "diversity": 0.05,
             }
             # Temporarily override weights
@@ -499,7 +541,7 @@ async def get_recommendations(
                 MovieRecommendation(
                     movie_id=r["movie_id"],
                     title=r["title"],
-                    predicted_rating=r["svd_pred"],
+                    predicted_rating=r.get("predicted_rating", r.get("svd_pred", 0.0)),
                     genres=r["genres"],
                     hybrid_score=r["hybrid_score"],
                 )
@@ -541,44 +583,46 @@ async def get_recommendations(
             )
 
     # ─────────────────────────────────────────────────────────
-    # CASE 4: SVD-only fallback (hybrid engine not loaded)
+    # CASE 4: LightGCN-only fallback (hybrid engine not loaded)
     # ─────────────────────────────────────────────────────────
-    if svd_model and ratings_df is not None:
+    if lightgcn_model and id_mappings is not None and ratings_df is not None:
         try:
-            user_rated = set(ratings_df[ratings_df["userId"] == user_id]["movieId"])
-            unrated = [m for m in movies_df["movieId"] if m not in user_rated]
-            if unrated:
+            user_idx = id_mappings["user_raw_to_idx"].get(user_id)
+            if user_idx is not None:
+                # Recommend directly using LightGCN model top-n
+                top_idxs = lightgcn_model.recommend_top_n(user_idx, top_n=top_n)
+                item_idx_to_raw = id_mappings["item_idx_to_raw"]
+                movies = []
                 genre_col = "genre_str" if "genre_str" in movies_df.columns else "genres"
-                predictions = []
-                for mid in unrated:
-                    pred = svd_model.predict(user_id, mid).est
-                    row = movies_df[movies_df["movieId"] == mid]
-                    title = row["title"].values[0] if len(row) > 0 else f"Movie {mid}"
-                    g = row[genre_col].values[0] if len(row) > 0 else ""
-                    if isinstance(g, list):
-                        genre_list = g
-                    else:
-                        genre_list = g.split("|") if g else []
-                    predictions.append((mid, title, pred, genre_list))
-
-                predictions.sort(key=lambda x: x[2], reverse=True)
-                movies = [
-                    MovieRecommendation(
-                        movie_id=m[0], title=m[1],
-                        predicted_rating=round(m[2], 2), genres=m[3],
-                    )
-                    for m in predictions[:top_n]
-                ]
+                for idx in top_idxs:
+                    mid = item_idx_to_raw.get(idx)
+                    if mid is not None:
+                        row = movies_df[movies_df["movieId"] == mid]
+                        title = row["title"].values[0] if len(row) > 0 else f"Movie {mid}"
+                        g = row[genre_col].values[0] if len(row) > 0 else ""
+                        if isinstance(g, list):
+                            genre_list = g
+                        else:
+                            genre_list = g.split("|") if g else []
+                        movies.append(
+                            MovieRecommendation(
+                                movie_id=mid,
+                                title=title,
+                                predicted_rating=0.0,
+                                genres=genre_list,
+                                hybrid_score=None,
+                            )
+                        )
                 latency = (time.time() - start) * 1000
                 return RecommendationResponse(
                     user_id=user_id,
                     recommendations=movies,
-                    source="svd_only_fallback",
+                    source="lightgcn_only_fallback",
                     user_type=user_type,
                     latency_ms=round(latency, 2),
                 )
         except Exception as e:
-            print(f"Warning: SVD fallback failed: {e}")
+            print(f"Warning: LightGCN fallback failed: {e}")
 
     # ─────────────────────────────────────────────────────────
     # CASE 5: Everything failed → global popular from SQLite
@@ -828,22 +872,22 @@ async def get_model_status():
             except Exception:
                 pass
 
-    if model_info is None and svd_model:
-        model_info = {"algorithm": "SVD", "serving_mode": "offline_inference_only"}
+    if model_info is None and lightgcn_model:
+        model_info = {"algorithm": "LightGCN + TrustSVD", "serving_mode": "online_inference"}
 
     if model_info:
         model_info["hybrid_enabled"] = hybrid_engine is not None
         if hybrid_engine:
             model_info["hybrid_weights"] = hybrid_engine.weights
             model_info["signals"] = [
-                "SVD (Collaborative Filtering)",
-                "Content-Based (Genre Matching)",
-                "Recent Taste (Time-Weighted)",
-                "Popularity (Trending)",
-                "Diversity (MMR Re-ranking)",
+                "LightGCN (Graph Collaborative Filtering - 50%)",
+                "TrustSVD (Social Collaborative Filtering - 15%)",
+                "Content-Based (Genre Matching - 25%)",
+                "Recent Taste (Time-Weighted - 10%)",
+                "Diversity (MMR Re-ranking - 5%)",
             ]
 
-    status = "ready" if hybrid_engine else ("degraded" if svd_model else "no_model")
+    status = "ready" if hybrid_engine else ("degraded" if lightgcn_model else "no_model")
 
     return ModelStatus(
         status=status,
@@ -890,7 +934,6 @@ async def trigger_training(
             status="success",
             message=(
                 f"Pipeline completed in {result['pipeline_time']:.1f}s. "
-                f"RMSE: {result['metrics']['rmse_mean']}. "
                 f"Users: {result['top_n_count']}. "
                 f"Restart server to reload hybrid engine."
             ),

@@ -2,19 +2,21 @@
 Hybrid Recommender — Kết hợp nhiều tín hiệu để recommend.
 
 Combines:
-  1. SVD Score (Collaborative Filtering) — "users giống bạn thích phim này"
-  2. Content Score (Genre matching) — "phim này cùng thể loại bạn hay xem"
-  3. Recent Taste Score — "gần đây bạn đang chuyển sang thích thể loại này"
-  4. Popularity Score — "phim này đang được nhiều người xem"
+  1. LightGCN Score (Graph Collaborative Filtering) — "users giống bạn thích phim này"
+  2. TrustSVD Score (Social Collaborative Filtering) — "những người tin cậy thích phim này"
+  3. Content Score (Genre matching) — "phim này cùng thể loại bạn hay xem"
+  4. Recent Taste Score — "gần đây bạn đang chuyển sang thích thể loại này"
   5. Diversity Bonus — đảm bảo kết quả đa dạng, không chỉ 1 thể loại
 
-Final Score = w1*SVD + w2*Content + w3*Recent + w4*Popularity + diversity_adjustment
+Final Score = w1*LightGCN + w2*TrustSVD + w3*Content + w4*Recent + diversity_adjustment
 """
 import time
 from collections import defaultdict
+from typing import List, Dict, Any
 
 import numpy as np
 import pandas as pd
+import torch
 
 from pipeline.content_based import (
     build_movie_genre_matrix,
@@ -33,11 +35,11 @@ from pipeline.content_based import (
 # =============================================================================
 
 DEFAULT_WEIGHTS = {
-    "svd": 0.50,        # Collaborative filtering (core)
-    "content": 0.25,    # Genre matching with user profile
-    "recent": 0.10,     # Recent genre preference shift
-    "popularity": 0.10, # Trending / popular bonus
-    "diversity": 0.05,  # Diversity bonus
+    "lightgcn": 0.50,    # Graph-based collaborative filtering (core)
+    "trust_svd": 0.15,   # Social-regularized collaborative filtering (ratings)
+    "content": 0.25,     # Genre matching with user profile
+    "recent": 0.10,      # Recent genre preference shift
+    "diversity": 0.05,   # Diversity bonus (MMR weight)
 }
 
 
@@ -49,18 +51,22 @@ class HybridRecommender:
     """
     Multi-signal recommendation engine.
 
-    Kết hợp SVD + Content-Based + Popularity + Diversity.
+    Kết hợp LightGCN + TrustSVD + Content-Based + Diversity.
     """
 
     def __init__(
         self,
-        svd_model,
+        lightgcn_engine,
+        trust_svd_engine,
+        id_mappings: dict,
         ratings_df: pd.DataFrame,
         movies_df: pd.DataFrame,
         weights: dict = None,
         verbose: bool = True,
     ):
-        self.svd_model = svd_model
+        self.lightgcn_engine = lightgcn_engine
+        self.trust_svd_engine = trust_svd_engine
+        self.id_mappings = id_mappings
         self.ratings_df = ratings_df
         self.movies_df = movies_df
         self.weights = weights or DEFAULT_WEIGHTS.copy()
@@ -93,11 +99,16 @@ class HybridRecommender:
             }
 
         if verbose:
-            print(f"   ├── SVD model loaded")
-            print(f"   ├── Genre matrix: {self.genre_matrix.shape}")
-            print(f"   ├── Popularity: {len(self.popularity_map)} movies")
-            print(f"   ├── Weights: {self.weights}")
-            print(f"   └── Ready")
+            if lightgcn_engine is not None:
+                print("   |- LightGCN engine loaded")
+            if trust_svd_engine is not None:
+                print("   |- TrustSVD engine loaded")
+            if id_mappings is not None:
+                print("   |- ID mappings loaded")
+            print(f"   |- Genre matrix: {self.genre_matrix.shape}")
+            print(f"   |- Popularity: {len(self.popularity_map)} movies")
+            print(f"   |- Weights: {self.weights}")
+            print("   - Ready")
 
     def get_user_profile(self, user_id: int) -> dict:
         """Get comprehensive user profile including genre preferences."""
@@ -157,65 +168,99 @@ class HybridRecommender:
         # 3. Get all candidate movies (unrated)
         all_movie_ids = [mid for mid in self.movie_info.keys() if mid not in rated_movies]
 
-        if not all_movie_ids:
+        if not all_movie_ids or not self.id_mappings:
             return []
 
-        # 4. Score each candidate
+        user_idx = self.id_mappings["user_raw_to_idx"].get(user_id)
+        if user_idx is None:
+            # Cold start fallback if user not in training interaction matrix
+            return []
+
+        item_raw_to_idx = self.id_mappings["item_raw_to_idx"]
+        candidate_idxs = []
+        valid_movie_ids = []
+        for mid in all_movie_ids:
+            idx = item_raw_to_idx.get(mid)
+            if idx is not None:
+                candidate_idxs.append(idx)
+                valid_movie_ids.append(mid)
+
+        if not valid_movie_ids:
+            return []
+
+        # 4. Batch prediction for LightGCN (Sigmoid normalized)
+        all_gcn_sigmoid = None
+        if self.lightgcn_engine and user_idx is not None:
+            with torch.no_grad():
+                user_vec = self.lightgcn_engine._user_emb[user_idx].to(self.lightgcn_engine.device)
+                all_scores = torch.matmul(self.lightgcn_engine._item_emb, user_vec)
+                all_gcn_sigmoid = torch.sigmoid(all_scores).cpu().numpy()
+
+        # 5. Batch prediction for TrustSVD (Scale normalized)
+        trust_ratings = None
+        trust_scores = None
+        if self.trust_svd_engine and user_idx is not None and candidate_idxs:
+            trust_ratings = self.trust_svd_engine.predict_batch(user_idx, candidate_idxs)
+            trust_scores = (trust_ratings - 1.0) / 4.0  # 1-5 scale -> 0-1
+
+        # 6. Score each candidate
         candidates = []
 
         # Batch content scores
         content_scores_all = batch_content_scores(user_genre_vec, self.genre_matrix)
         recent_scores_all = batch_content_scores(recent_genre_vec, self.genre_matrix)
 
-        for movie_id in all_movie_ids:
-            idx = self.movie_id_to_idx.get(movie_id)
-            if idx is None:
-                continue
+        for i, mid in enumerate(valid_movie_ids):
+            item_idx = candidate_idxs[i]
 
-            # SVD score (normalize to 0-1 from 1-5 scale)
-            svd_pred = self.svd_model.predict(user_id, movie_id).est
-            svd_norm = (svd_pred - 1.0) / 4.0  # 1-5 → 0-1
+            # LightGCN score (Sigmoid)
+            gcn_score = float(all_gcn_sigmoid[item_idx]) if all_gcn_sigmoid is not None else 0.0
+
+            # TrustSVD score (Scale)
+            trust_score = float(trust_scores[i]) if trust_scores is not None else 0.0
 
             # Content score (genre match)
-            content_score = float(content_scores_all[idx])
+            idx = self.movie_id_to_idx.get(mid)
+            content_score = float(content_scores_all[idx]) if idx is not None else 0.0
 
             # Recent taste score
-            recent_score = float(recent_scores_all[idx])
-
-            # Popularity score
-            pop_score = self.popularity_map.get(movie_id, 0.0)
+            recent_score = float(recent_scores_all[idx]) if idx is not None else 0.0
 
             # Hybrid score
             hybrid_score = (
-                self.weights["svd"] * svd_norm
+                self.weights["lightgcn"] * gcn_score
+                + self.weights["trust_svd"] * trust_score
                 + self.weights["content"] * content_score
                 + self.weights["recent"] * recent_score
-                + self.weights["popularity"] * pop_score
             )
 
+            candidate_rating = float(trust_ratings[i]) if trust_ratings is not None else float(self.trust_svd_engine.mu) if self.trust_svd_engine else 3.0
+
             candidate = {
-                "movie_id": movie_id,
+                "movie_id": mid,
                 "hybrid_score": hybrid_score,
-                "svd_pred": round(svd_pred, 2),
+                "predicted_rating": round(candidate_rating, 2),
+                "svd_pred": round(candidate_rating, 2),  # Backward compatibility
+                "lightgcn_score": round(gcn_score, 4),
             }
 
             if explain:
                 candidate["breakdown"] = {
-                    "svd": round(svd_norm, 3),
+                    "lightgcn": round(gcn_score, 3),
+                    "trust_svd": round(trust_score, 3),
                     "content": round(content_score, 3),
                     "recent": round(recent_score, 3),
-                    "popularity": round(pop_score, 3),
                 }
 
             candidates.append(candidate)
 
-        # 5. Sort by hybrid score
+        # 7. Sort by hybrid score
         candidates.sort(key=lambda x: x["hybrid_score"], reverse=True)
 
-        # 6. Apply diversity re-ranking (MMR-like)
+        # 8. Apply diversity re-ranking (MMR-like)
         final = self._diversify(candidates, top_n)
 
-        # 7. Enrich with movie info
+        # 9. Enrich with movie info
         for item in final:
             info = self.movie_info.get(item["movie_id"], {})
             item["title"] = info.get("title", f"Movie {item['movie_id']}")
@@ -287,16 +332,32 @@ class HybridRecommender:
         recent_genre_vec = profile["recent_genre_vector"]
 
         idx = self.movie_id_to_idx.get(movie_id)
-        if idx is None:
+        if idx is None or not self.id_mappings:
             return {"error": f"Movie {movie_id} not found"}
 
         movie_genre_vec = self.genre_matrix[idx]
 
-        # Scores
-        svd_pred = self.svd_model.predict(user_id, movie_id).est
+        user_idx = self.id_mappings["user_raw_to_idx"].get(user_id)
+        item_idx = self.id_mappings["item_raw_to_idx"].get(movie_id)
+
+        # LightGCN score
+        if self.lightgcn_engine and user_idx is not None and item_idx is not None:
+            with torch.no_grad():
+                u_emb = self.lightgcn_engine._user_emb[user_idx]
+                i_emb = self.lightgcn_engine._item_emb[item_idx]
+                dot_val = torch.dot(u_emb, i_emb).item()
+                gcn_score = torch.sigmoid(torch.tensor(dot_val)).item()
+        else:
+            gcn_score = 0.0
+
+        # TrustSVD rating prediction
+        if self.trust_svd_engine and user_idx is not None and item_idx is not None:
+            trust_pred = self.trust_svd_engine.predict_rating(user_idx, item_idx)
+        else:
+            trust_pred = float(self.trust_svd_engine.mu) if self.trust_svd_engine else 3.0
+
         content = content_based_score(user_genre_vec, movie_genre_vec)
         recent = content_based_score(recent_genre_vec, movie_genre_vec)
-        pop = self.popularity_map.get(movie_id, 0.0)
 
         # Genre overlap explanation
         info = self.movie_info.get(movie_id, {})
@@ -327,10 +388,10 @@ class HybridRecommender:
                 "genres": list(movie_genres),
             },
             "scores": {
-                "svd_prediction": round(svd_pred, 2),
+                "lightgcn_match": round(gcn_score, 3),
+                "trust_svd_prediction": round(trust_pred, 2),
                 "content_match": round(content, 3),
                 "recent_taste_match": round(recent, 3),
-                "popularity": round(pop, 3),
             },
             "reasons": {
                 "matching_genres": matching_genres,
@@ -346,7 +407,9 @@ class HybridRecommender:
 # =============================================================================
 
 def generate_hybrid_top_n(
-    svd_model,
+    lightgcn_engine,
+    trust_svd_engine,
+    id_mappings: dict,
     ratings_df: pd.DataFrame,
     movies_df: pd.DataFrame,
     n: int = 10,
@@ -364,7 +427,8 @@ def generate_hybrid_top_n(
     start = time.time()
 
     recommender = HybridRecommender(
-        svd_model, ratings_df, movies_df,
+        lightgcn_engine, trust_svd_engine, id_mappings,
+        ratings_df, movies_df,
         weights=weights, verbose=verbose,
     )
 
@@ -382,12 +446,13 @@ def generate_hybrid_top_n(
     elapsed = time.time() - start
 
     if verbose:
-        print(f"\n   Hybrid recommendations generated")
+        print("\n   Hybrid recommendations generated")
         print(f"   Users: {len(results)}")
         print(f"   Time: {elapsed:.1f}s")
         if 1 in results:
-            print(f"\n   Sample (User 1):")
+            print("\n   Sample (User 1):")
             for r in results[1][:5]:
-                print(f"     {r['title']}: hybrid={r['hybrid_score']:.3f}, svd={r['svd_pred']}")
+                print(f"     {r['title']}: hybrid={r['hybrid_score']:.3f}, trust_svd={r['svd_pred']}, gcn={r['lightgcn_score']:.3f}")
 
     return results
+

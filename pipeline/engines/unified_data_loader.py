@@ -25,11 +25,13 @@ class UnifiedDataLoader:
 
     def __init__(
         self,
-        filepath: str,
+        filepath: str = None,
+        df: pd.DataFrame = None,
         min_interactions: int = 5,
         seq_max_len: int = 50,
     ):
         self.filepath = filepath
+        self.df_input = df
         self.min_interactions = min_interactions
         self.seq_max_len = seq_max_len
 
@@ -43,9 +45,16 @@ class UnifiedDataLoader:
     # Step 1: Load & Clean
     # ------------------------------------------------------------------
     def load_and_clean(self) -> pd.DataFrame:
-        """Load u.data, filter cold users/items, create contiguous indices."""
-        columns = ["user_id", "item_id", "rating", "timestamp"]
-        df = pd.read_csv(self.filepath, sep="\t", names=columns)
+        """Load u.data or df, filter cold users/items, create contiguous indices."""
+        if self.df_input is not None:
+            df = self.df_input.copy()
+            if "userId" in df.columns:
+                df = df.rename(columns={"userId": "user_id", "movieId": "item_id"})
+        else:
+            if not self.filepath:
+                raise ValueError("Either filepath or df must be provided to UnifiedDataLoader")
+            columns = ["user_id", "item_id", "rating", "timestamp"]
+            df = pd.read_csv(self.filepath, sep="\t", names=columns)
 
         # Filter users and items with fewer than min_interactions
         user_counts = df["user_id"].value_counts()

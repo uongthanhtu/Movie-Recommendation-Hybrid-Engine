@@ -20,7 +20,7 @@ def get_redis_client(host: str = "localhost", port: int = 6379, db: int = 0) -> 
         r.ping()
         print(f"   Redis connected: {host}:{port}/{db}")
     except redis.ConnectionError:
-        print(f"  ️  Redis not available at {host}:{port}. Results will NOT be cached.")
+        print(f"   Redis not available at {host}:{port}. Results will NOT be cached.")
         return None
     return r
 
@@ -71,13 +71,22 @@ def push_recommendations(
 
     for user_id, recs in top_n.items():
         movies_list = []
-        for movie_id, pred_rating in recs:
+        for item in recs:
+            if isinstance(item, tuple):
+                movie_id, pred_rating = item
+                hybrid_score = None
+            else:
+                movie_id = item["movie_id"]
+                pred_rating = item.get("predicted_rating", item.get("svd_pred", 0.0))
+                hybrid_score = item.get("hybrid_score", None)
+
             info = movie_lookup.get(movie_id, {"title": f"Movie {movie_id}", "genres": []})
             movies_list.append({
                 "movie_id": int(movie_id) if not isinstance(movie_id, int) else movie_id,
                 "title": info["title"],
                 "predicted_rating": round(pred_rating, 2),
                 "genres": info["genres"],
+                "hybrid_score": round(hybrid_score, 4) if hybrid_score is not None else None,
             })
 
         key = f"reco:{int(user_id) if not isinstance(user_id, int) else user_id}"
@@ -137,4 +146,4 @@ def flush_old_recommendations(r: redis.Redis):
     keys = r.keys("reco:*")
     if keys:
         r.delete(*keys)
-        print(f"  ️  Flushed {len(keys)} old recommendation keys")
+        print(f"   Flushed {len(keys)} old recommendation keys")

@@ -167,13 +167,13 @@ def load_all(data_dir: str = "data/ml-100k", save_db: bool = True, db_path: str 
     stats = compute_stats(ratings, movies)
 
     print(f"\n   Dataset Statistics:")
-    print(f"   ├── Users:          {stats['n_users']:,}")
-    print(f"   ├── Movies:         {stats['n_movies']:,}")
-    print(f"   ├── Ratings:        {stats['n_ratings']:,}")
-    print(f"   ├── Sparsity:       {stats['sparsity_pct']}")
-    print(f"   ├── Avg Rating:     {stats['avg_rating']:.2f} ± {stats['rating_std']:.2f}")
-    print(f"   ├── Avg/User:       {stats['avg_ratings_per_user']:.1f} ratings")
-    print(f"   └── Avg/Movie:      {stats['avg_ratings_per_movie']:.1f} ratings")
+    print(f"   |- Users:          {stats['n_users']:,}")
+    print(f"   |- Movies:         {stats['n_movies']:,}")
+    print(f"   |- Ratings:        {stats['n_ratings']:,}")
+    print(f"   |- Sparsity:       {stats['sparsity_pct']}")
+    print(f"   |- Avg Rating:     {stats['avg_rating']:.2f} +/- {stats['rating_std']:.2f}")
+    print(f"   |- Avg/User:       {stats['avg_ratings_per_user']:.1f} ratings")
+    print(f"   - Avg/Movie:      {stats['avg_ratings_per_movie']:.1f} ratings")
     print(f"\n   Rating Distribution: {stats['rating_distribution']}")
 
     if save_db:

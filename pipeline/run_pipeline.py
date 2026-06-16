@@ -31,12 +31,9 @@ from pipeline.data_loader import load_all
 from pipeline.etl_from_db import extract_from_sqlite, extract_from_postgres
 from pipeline.train_svd import (
     build_surprise_data,
-    train_svd,
-    grid_search_svd,
     benchmark_all_algorithms,
-    save_model,
 )
-from pipeline.generate_recommendations import generate_top_n, generate_popular_movies
+from pipeline.generate_recommendations import generate_popular_movies
 from pipeline.push_to_redis import (
     get_redis_client,
     push_recommendations,
@@ -44,6 +41,12 @@ from pipeline.push_to_redis import (
     push_model_metadata,
     flush_old_recommendations,
 )
+from pipeline.engines.unified_data_loader import UnifiedDataLoader
+from pipeline.engines.lightgcn_engine import LightGCNEngine
+from pipeline.engines.trust_svd_engine import TrustSVDEngine
+from pipeline.hybrid_recommender import generate_hybrid_top_n
+import pickle
+import json
 
 
 def run_pipeline(
@@ -72,9 +75,9 @@ def run_pipeline(
     # =========================================================================
     # STEP 1: Load Data
     # =========================================================================
-    print("\n" + "─" * 70)
+    print("\n" + "-" * 70)
     print("STEP 1: Loading Data")
-    print("─" * 70)
+    print("-" * 70)
 
     if data_source == "database":
         # Production mode: read from database
@@ -96,9 +99,9 @@ def run_pipeline(
     # =========================================================================
     benchmark_df = None
     if not skip_benchmark:
-        print("\n" + "─" * 70)
+        print("\n" + "-" * 70)
         print("STEP 2: Algorithm Benchmark (SVD vs KNN vs NMF)")
-        print("─" * 70)
+        print("-" * 70)
         benchmark_df = benchmark_all_algorithms(data)
 
         # Save benchmark results
@@ -110,39 +113,82 @@ def run_pipeline(
         print("\nSkipping benchmark (--skip-benchmark)")
 
     # =========================================================================
-    # STEP 3: Train Best SVD Model
+    # STEP 3: Train PyTorch Models (LightGCN & TrustSVD)
     # =========================================================================
-    print("\n" + "─" * 70)
-    print("STEP 3: Training SVD Model")
-    print("─" * 70)
+    print("\n" + "-" * 70)
+    print("STEP 3: Training PyTorch Models (LightGCN & TrustSVD)")
+    print("-" * 70)
 
-    if not skip_gridsearch:
-        print("  Running GridSearchCV for hyperparameter optimization...")
-        best_algo, best_rmse, best_params, gs_results, search_time = grid_search_svd(data)
+    # Initialize UnifiedDataLoader using the ratings DataFrame
+    loader = UnifiedDataLoader(df=ratings, min_interactions=5)
+    unified_data = loader.build_all()
 
-        # Save GridSearch results
-        gs_path = os.path.join(model_dir, "gridsearch_results.csv")
-        gs_results.to_csv(gs_path, index=False)
-        print(f"  GridSearch results saved: {gs_path}")
+    num_users = unified_data["num_users"]
+    num_items = unified_data["num_items"]
 
-        # Re-train on full data with best params
-        algo, trainset, metrics = train_svd(
-            data,
-            n_factors=best_params["n_factors"],
-            n_epochs=best_params["n_epochs"],
-            lr_all=best_params["lr_all"],
-            reg_all=best_params["reg_all"],
-        )
-    else:
-        print("  Using default SVD params (--skip-gridsearch)")
-        algo, trainset, metrics = train_svd(data)
+    # Train LightGCN
+    print("\nTraining LightGCNEngine...")
+    lightgcn = LightGCNEngine(
+        num_users=num_users,
+        num_items=num_items,
+        embedding_dim=64,
+        num_layers=3,
+        n_epochs=30,
+    )
+    lightgcn.fit({
+        "sym_adj_mat": unified_data["sym_adj_mat"],
+        "interaction_matrix": unified_data["interaction_matrix"],
+    })
+    lightgcn_path = os.path.join(model_dir, "lightgcn_model.pth")
+    lightgcn.save_model(lightgcn_path)
 
-    # Save model
-    model_path = os.path.join(model_dir, "svd_model.pkl")
-    save_model(algo, model_path)
+    # Train TrustSVD
+    print("\nTraining TrustSVDEngine...")
+    trust_svd = TrustSVDEngine(
+        n_factors=50,
+        n_epochs=30,
+        lr=0.005,
+        reg=0.02,
+    )
+    trust_svd.fit({
+        "interaction_matrix": unified_data["interaction_matrix"],
+        "trust_matrix": unified_data["trust_matrix"],
+    })
+    trust_svd_path = os.path.join(model_dir, "trust_svd_model.pth")
+    trust_svd.save_model(trust_svd_path)
 
-    # Save model metadata locally
-    import json
+    # Save ID Mappings
+    id_mappings = {
+        "user_idx_to_raw": loader.user_mapping,
+        "item_idx_to_raw": loader.item_mapping,
+        "user_raw_to_idx": {v: k for k, v in loader.user_mapping.items()},
+        "item_raw_to_idx": {v: k for k, v in loader.item_mapping.items()},
+    }
+    mapping_path = os.path.join(model_dir, "id_mappings.pkl")
+    with open(mapping_path, "wb") as f:
+        pickle.dump(id_mappings, f)
+    print(f"  ID mappings saved: {mapping_path}")
+
+    # Build metrics metadata
+    metrics = {
+        "algorithm": "LightGCN + TrustSVD",
+        "dataset": "MovieLens-100k",
+        "num_users": num_users,
+        "num_items": num_items,
+        "lightgcn": {
+            "embedding_dim": 64,
+            "num_layers": 3,
+            "n_epochs": 30,
+        },
+        "trust_svd": {
+            "n_factors": 50,
+            "n_epochs": 30,
+            "mu": float(trust_svd.mu),
+        },
+        "trained_at": datetime.now().isoformat(),
+    }
+
+    # Save metadata locally
     metadata_path = os.path.join(model_dir, "model_metadata.json")
     try:
         with open(metadata_path, "w", encoding="utf-8") as f:
@@ -154,19 +200,27 @@ def run_pipeline(
     # =========================================================================
     # STEP 4: Generate Recommendations
     # =========================================================================
-    print("\n" + "─" * 70)
+    print("\n" + "-" * 70)
     print("STEP 4: Generating Recommendations")
-    print("─" * 70)
+    print("-" * 70)
 
-    top_n_recs = generate_top_n(algo, trainset, n=top_n)
+    top_n_recs = generate_hybrid_top_n(
+        lightgcn_engine=lightgcn,
+        trust_svd_engine=trust_svd,
+        id_mappings=id_mappings,
+        ratings_df=ratings,
+        movies_df=movies,
+        n=top_n,
+        verbose=True,
+    )
     popular = generate_popular_movies(ratings, movies, n=20)
 
     # =========================================================================
     # STEP 5: Push to Redis
     # =========================================================================
-    print("\n" + "─" * 70)
+    print("\n" + "-" * 70)
     print("STEP 5: Pushing to Redis")
-    print("─" * 70)
+    print("-" * 70)
 
     if no_redis:
         print("  Skipping Redis push (--no-redis)")
@@ -192,12 +246,10 @@ def run_pipeline(
     print("PIPELINE COMPLETE!")
     print("=" * 70)
     print(f"   Dataset:        MovieLens-100k ({stats['n_ratings']:,} ratings)")
-    print(f"   Algorithm:      SVD (n_factors={metrics.get('n_factors', '?')})")
-    print(f"   RMSE:           {metrics['rmse_mean']}")
-    print(f"   MAE:            {metrics['mae_mean']}")
+    print(f"   Algorithm:      {metrics['algorithm']}")
     print(f"   Users served:   {len(top_n_recs):,}")
     print(f"   Redis cached:   {'Yes' if n_pushed > 0 else 'No'}")
-    print(f"   Model saved:    {model_path}")
+    print(f"   Models saved:   {lightgcn_path} & {trust_svd_path}")
     print(f"   Total time:     {pipeline_time:.1f}s")
     print("=" * 70)
 
