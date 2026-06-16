@@ -59,24 +59,39 @@ LightGCN simplifies GCNs by removing non-linear activations and feature transfor
 
 #### Embedding Propagation
 At layer $k+1$, user embedding $e_u^{(k+1)}$ and item embedding $e_i^{(k+1)}$ aggregate local neighborhood structures:
-$$e_u^{(k+1)} = \sum_{i \in \mathcal{N}_u} \frac{1}{\sqrt{|\mathcal{N}_u||\mathcal{N}_i|}} e_i^{(k)} \quad ; \quad e_i^{(k+1)} = \sum_{u \in \mathcal{N}_i} \frac{1}{\sqrt{|\mathcal{N}_i||\mathcal{N}_u|}} e_u^{(k)}$$
+
+$$
+e_u^{(k+1)} = \sum_{i \in \mathcal{N}_u} \frac{1}{\sqrt{|\mathcal{N}_u||\mathcal{N}_i|}} e_i^{(k)} \quad ; \quad e_i^{(k+1)} = \sum_{u \in \mathcal{N}_i} \frac{1}{\sqrt{|\mathcal{N}_i||\mathcal{N}_u|}} e_u^{(k)}
+$$
 
 In matrix form, this is formulated as:
-$$E^{(k+1)} = \left(D^{-\frac{1}{2}} A D^{-\frac{1}{2}}\right) E^{(k)} = \tilde{A} E^{(k)}$$
+
+$$
+E^{(k+1)} = \left(D^{-\frac{1}{2}} A D^{-\frac{1}{2}}\right) E^{(k)} = \tilde{A} E^{(k)}
+$$
 
 #### Layer Combination & BPR Loss
 The final representation is computed via layer averaging: $e_u = \frac{1}{K+1} \sum_{k=0}^K e_u^{(k)}$. The pairwise ranking objective is optimized by minimizing:
-$$\mathcal{L}_{BPR} = -\sum_{u=1}^{|\mathcal{U}|} \sum_{i \in \mathcal{N}_u} \sum_{j \notin \mathcal{N}_u} \ln \sigma \left( e_u^T e_i - e_u^T e_j \right) + \lambda_{reg} \|E^{(0)}\|_2^2$$
+
+$$
+\mathcal{L}_{BPR} = -\sum_{u=1}^{|\mathcal{U}|} \sum_{i \in \mathcal{N}_u} \sum_{j \notin \mathcal{N}_u} \ln \sigma \left( e_u^T e_i - e_u^T e_j \right) + \lambda_{reg} \|E^{(0)}\|_2^2
+$$
 
 ### 4.2. SASRec Self-Attentive Sequential Recommendation
 SASRec models sequential context using a causal Transformer decoder.
 
 #### Self-Attention & Causality Masking
 Given sequence embeddings $E \in \mathbb{R}^{N \times d}$, attention scores are projected via Query ($Q$), Key ($K$), and Value ($V$):
-$$\text{Attention}(Q,K,V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d}} + M\right)V$$
+
+$$
+\text{Attention}(Q,K,V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d}} + M\right)V
+$$
 
 To preserve the autoregressive property, a causal mask matrix $M \in \mathbb{R}^{N \times N}$ suppresses future tokens:
-$$M_{i,j} = \begin{cases} 0 & \text{if } i \ge j \\ -\infty & \text{if } i < j \end{cases}$$
+
+$$
+M_{i,j} = \begin{cases} 0 & \text{if } i \ge j \\ -\infty & \text{if } i < j \end{cases}
+$$
 
 ---
 
