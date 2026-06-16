@@ -13,7 +13,7 @@ from pipeline.hybrid_recommender import HybridRecommender
 
 def main():
     print("=" * 70)
-    print("🧪 TESTING HYBRID RECOMMENDER")
+    print(" TESTING HYBRID RECOMMENDER")
     print("=" * 70)
 
     # Load data
@@ -31,7 +31,7 @@ def main():
     # Test 1: User profile
     # =====================================================
     print("\n" + "=" * 70)
-    print("👤 TEST 1: User 1 Genre Profile")
+    print(" TEST 1: User 1 Genre Profile")
     print("=" * 70)
 
     profile = hybrid.get_user_profile(1)
@@ -50,7 +50,7 @@ def main():
     # Test 2: Hybrid recommendations
     # =====================================================
     print("\n" + "=" * 70)
-    print("🎬 TEST 2: Hybrid Recommendations for User 1")
+    print(" TEST 2: Hybrid Recommendations for User 1")
     print("=" * 70)
 
     recs = hybrid.recommend(1, top_n=10, explain=True)
@@ -68,7 +68,7 @@ def main():
     # Test 3: SVD-only vs Hybrid comparison
     # =====================================================
     print("\n" + "=" * 70)
-    print("📊 TEST 3: SVD-only vs Hybrid (User 1)")
+    print(" TEST 3: SVD-only vs Hybrid (User 1)")
     print("=" * 70)
 
     # SVD-only top 10
@@ -85,7 +85,7 @@ def main():
 
         hyb = recs[i] if i < len(recs) else {"title": "-", "hybrid_score": 0}
 
-        marker = " ✨" if hyb["title"] != svd_title[:44] else ""
+        marker = " " if hyb["title"] != svd_title[:44] else ""
         print(f"  {i+1:2d}. {svd_title[:35]:<36} ({svd_score:.2f})  │  {hyb['title'][:35]:<36} ({hyb['hybrid_score']:.3f}){marker}")
 
     # =====================================================
@@ -94,7 +94,7 @@ def main():
     if recs:
         top_movie = recs[0]["movie_id"]
         print(f"\n{'=' * 70}")
-        print(f"🔍 TEST 4: Why recommend '{recs[0]['title']}' to User 1?")
+        print(f" TEST 4: Why recommend '{recs[0]['title']}' to User 1?")
         print(f"{'=' * 70}")
 
         explanation = hybrid.explain_recommendation(1, top_movie)

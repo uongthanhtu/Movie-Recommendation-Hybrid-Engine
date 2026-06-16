@@ -135,7 +135,7 @@ def _compute_stats(ratings: pd.DataFrame, movies: pd.DataFrame) -> dict:
 
 def _print_stats(stats: dict, source_type: str, source_path: str):
     """Print dataset statistics."""
-    print(f"\n📊 ETL from {source_type}: {source_path}")
+    print(f"\n ETL from {source_type}: {source_path}")
     print(f"   ├── Users:     {stats['n_users']:,}")
     print(f"   ├── Movies:    {stats['n_movies']:,}")
     print(f"   ├── Ratings:   {stats['n_ratings']:,}")
@@ -161,7 +161,7 @@ def main():
             sys.exit(1)
         ratings, movies, stats = extract_from_postgres(args.pg_url)
 
-    print(f"\n✅ ETL complete!")
+    print(f"\n ETL complete!")
     print(f"   Ratings shape: {ratings.shape}")
     print(f"   Movies shape:  {movies.shape}")
     print(f"\n   Sample ratings:")

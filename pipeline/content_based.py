@@ -407,7 +407,7 @@ def build_content_features(
     Returns dict containing all pre-computed features needed for hybrid scoring.
     """
     if verbose:
-        print("\n🎯 Building Content-Based Features...")
+        print("\n Building Content-Based Features...")
 
     # Genre matrix
     genre_matrix, movie_id_to_idx = build_movie_genre_matrix(movies_df)
@@ -429,7 +429,7 @@ def build_content_features(
                   f"{len(demo_prefs.get('gender', {}))} genders")
 
     if verbose:
-        print(f"   └── ✅ Content features ready")
+        print(f"   └──  Content features ready")
 
     return {
         "genre_matrix": genre_matrix,

@@ -25,7 +25,7 @@ from pipeline.train_svd import build_surprise_data
 def run_comparison_experiment(data_dir: str = "data/ml-100k", output_dir: str = "models"):
     """Run comprehensive algorithm comparison."""
     print("=" * 70)
-    print("📊 EXPERIMENT 3: Algorithm Comparison (SVD vs KNN vs NMF)")
+    print("EXPERIMENT 3: Algorithm Comparison (SVD vs KNN vs NMF)")
     print("=" * 70)
 
     ratings = load_ratings(data_dir)
@@ -44,7 +44,7 @@ def run_comparison_experiment(data_dir: str = "data/ml-100k", output_dir: str = 
 
     results = []
     for name, algo in algorithms.items():
-        print(f"\n  🔄 Testing: {name}...")
+        print(f"\n  Testing: {name}...")
         start = time.time()
         cv = cross_validate(algo, data, measures=["RMSE", "MAE"], cv=5, verbose=False)
         elapsed = time.time() - start
@@ -65,7 +65,7 @@ def run_comparison_experiment(data_dir: str = "data/ml-100k", output_dir: str = 
     df = pd.DataFrame(results).sort_values("RMSE").reset_index(drop=True)
 
     print("\n" + "=" * 70)
-    print("📋 COMPLETE COMPARISON TABLE (sorted by RMSE)")
+    print("COMPLETE COMPARISON TABLE (sorted by RMSE)")
     print("=" * 70)
     print(df.to_string(index=False))
     print("=" * 70)
@@ -74,7 +74,7 @@ def run_comparison_experiment(data_dir: str = "data/ml-100k", output_dir: str = 
     os.makedirs(output_dir, exist_ok=True)
     csv_path = os.path.join(output_dir, "experiment_comparison_results.csv")
     df.to_csv(csv_path, index=False)
-    print(f"\n💾 Results saved: {csv_path}")
+    print(f"\nResults saved: {csv_path}")
 
     # Plot
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
@@ -108,7 +108,7 @@ def run_comparison_experiment(data_dir: str = "data/ml-100k", output_dir: str = 
     plt.tight_layout()
     chart_path = os.path.join(output_dir, "experiment_comparison_chart.png")
     plt.savefig(chart_path, dpi=150, bbox_inches="tight")
-    print(f"📈 Chart saved: {chart_path}")
+    print(f"Chart saved: {chart_path}")
     plt.close()
 
     return df

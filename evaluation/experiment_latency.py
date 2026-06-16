@@ -62,7 +62,7 @@ def measure_cache_latency(user_ids: list, redis_host: str = "localhost", redis_p
         r = redis_lib.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
         r.ping()
     except Exception:
-        print("  ⚠️  Redis not available. Skipping cache latency test.")
+        print("  Redis not available. Skipping cache latency test.")
         return []
 
     latencies = []
@@ -87,7 +87,7 @@ def run_latency_experiment(
 ):
     """Run latency comparison experiment."""
     print("=" * 70)
-    print("⏱️  EXPERIMENT 2: Latency — Cache vs Real-time Inference")
+    print("EXPERIMENT 2: Latency — Cache vs Real-time Inference")
     print("=" * 70)
 
     # Load data and model
@@ -109,11 +109,11 @@ def run_latency_experiment(
     print(f"  Testing with {len(test_users)} users...")
 
     # 1. Real-time inference latency
-    print(f"\n  📐 Measuring real-time inference latency...")
+    print(f"\n  Measuring real-time inference latency...")
     rt_latencies = measure_realtime_inference(algo, trainset, test_users)
 
     # 2. Redis cache latency
-    print(f"  ⚡ Measuring Redis cache latency...")
+    print(f"  Measuring Redis cache latency...")
     cache_latencies = measure_cache_latency(test_users)
 
     # Results
@@ -141,7 +141,7 @@ def run_latency_experiment(
 
     # Print comparison table
     print("\n" + "=" * 70)
-    print("📋 LATENCY COMPARISON TABLE")
+    print("LATENCY COMPARISON TABLE")
     print("=" * 70)
 
     if results.get("realtime") and results.get("cache"):
@@ -157,7 +157,7 @@ def run_latency_experiment(
         df = pd.DataFrame(table_data)
         df["Speedup"] = (df["Real-time SVD (ms)"] / df["Redis Cache (ms)"].clip(lower=0.01)).round(1).astype(str) + "x"
         print(df.to_string(index=False))
-        print(f"\n  🚀 Average Speedup: {speedup:.0f}x faster with Redis Cache!")
+        print(f"\n  Average Speedup: {speedup:.0f}x faster with Redis Cache!")
     elif results.get("realtime"):
         print("  Real-time inference measured, but Redis not available for comparison.")
         print(f"  Mean latency: {results['realtime']['mean_ms']:.2f}ms")
@@ -168,7 +168,7 @@ def run_latency_experiment(
 
     if results.get("realtime") and results.get("cache"):
         df.to_csv(csv_path, index=False)
-        print(f"\n💾 Results saved: {csv_path}")
+        print(f"\nResults saved: {csv_path}")
 
         # Plot
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
@@ -201,7 +201,7 @@ def run_latency_experiment(
         plt.tight_layout()
         chart_path = os.path.join(output_dir, "experiment_latency_chart.png")
         plt.savefig(chart_path, dpi=150, bbox_inches="tight")
-        print(f"📈 Chart saved: {chart_path}")
+        print(f"Chart saved: {chart_path}")
         plt.close()
 
     return results

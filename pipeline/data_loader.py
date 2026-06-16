@@ -149,7 +149,7 @@ def save_to_sqlite(
 
     conn.commit()
     conn.close()
-    print(f"  ✅ Saved to SQLite: {db_path}")
+    print(f"   Saved to SQLite: {db_path}")
 
 
 def load_all(data_dir: str = "data/ml-100k", save_db: bool = True, db_path: str = "data/movies.db"):
@@ -159,7 +159,7 @@ def load_all(data_dir: str = "data/ml-100k", save_db: bool = True, db_path: str 
     Returns:
         ratings (DataFrame), movies (DataFrame), stats (dict)
     """
-    print("📊 Loading MovieLens-100k dataset...")
+    print(" Loading MovieLens-100k dataset...")
     print(f"   Directory: {os.path.abspath(data_dir)}")
 
     ratings = load_ratings(data_dir)
@@ -184,6 +184,6 @@ def load_all(data_dir: str = "data/ml-100k", save_db: bool = True, db_path: str 
 
 if __name__ == "__main__":
     ratings, movies, stats = load_all()
-    print(f"\n✅ Data loaded successfully!")
+    print(f"\n Data loaded successfully!")
     print(f"   Ratings shape: {ratings.shape}")
     print(f"   Movies shape:  {movies.shape}")

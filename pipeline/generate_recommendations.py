@@ -29,7 +29,7 @@ def generate_top_n(algo, trainset, n: int = 10, verbose: bool = True) -> dict:
         dict: {raw_user_id: [(raw_movie_id, predicted_rating), ...]}
     """
     if verbose:
-        print(f"\n📋 Generating Top-{n} recommendations per user...")
+        print(f"\n Generating Top-{n} recommendations per user...")
 
     start = time.time()
 

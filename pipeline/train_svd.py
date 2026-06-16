@@ -52,7 +52,7 @@ def train_svd(
     )
 
     if verbose:
-        print(f"\n🤖 Training SVD (n_factors={n_factors}, epochs={n_epochs}, lr={lr_all}, reg={reg_all})...")
+        print(f"\n Training SVD (n_factors={n_factors}, epochs={n_epochs}, lr={lr_all}, reg={reg_all})...")
 
     # Cross-validate
     start = time.time()
@@ -106,7 +106,7 @@ def train_knn_baseline(data: Dataset, verbose: bool = True) -> tuple:
     algo = KNNBaseline(k=40, sim_options=sim_options, verbose=False)
 
     if verbose:
-        print(f"\n📐 Training KNNBaseline (k=40, item-based, pearson_baseline)...")
+        print(f"\n Training KNNBaseline (k=40, item-based, pearson_baseline)...")
 
     start = time.time()
     cv_results = cross_validate(
@@ -147,7 +147,7 @@ def train_nmf(data: Dataset, n_factors: int = 100, verbose: bool = True) -> tupl
     algo = NMF(n_factors=n_factors, n_epochs=50, verbose=False)
 
     if verbose:
-        print(f"\n📊 Training NMF (n_factors={n_factors})...")
+        print(f"\n Training NMF (n_factors={n_factors})...")
 
     start = time.time()
     cv_results = cross_validate(
@@ -192,7 +192,7 @@ def grid_search_svd(data: Dataset, verbose: bool = True) -> tuple:
         total_combos = 1
         for v in param_grid.values():
             total_combos *= len(v)
-        print(f"\n🔍 GridSearch SVD ({total_combos} combinations × 5 folds)...")
+        print(f"\n GridSearch SVD ({total_combos} combinations × 5 folds)...")
 
     start = time.time()
     gs = GridSearchCV(SVD, param_grid, measures=["rmse", "mae"], cv=5, n_jobs=-1)
@@ -220,7 +220,7 @@ def benchmark_all_algorithms(data: Dataset) -> pd.DataFrame:
     For the thesis: SVD vs KNN vs NMF benchmark table.
     """
     print("\n" + "=" * 70)
-    print("📊 BENCHMARK: SVD vs KNNBaseline vs NMF")
+    print(" BENCHMARK: SVD vs KNNBaseline vs NMF")
     print("=" * 70)
 
     results = []
@@ -238,7 +238,7 @@ def benchmark_all_algorithms(data: Dataset) -> pd.DataFrame:
     results.append(nmf_info)
 
     # 4. BaselineOnly (simple baseline)
-    print(f"\n📏 Training BaselineOnly...")
+    print(f"\n Training BaselineOnly...")
     algo_base = BaselineOnly(verbose=False)
     start = time.time()
     cv_base = cross_validate(algo_base, data, measures=["RMSE", "MAE"], cv=5, verbose=True)
@@ -251,7 +251,7 @@ def benchmark_all_algorithms(data: Dataset) -> pd.DataFrame:
     })
 
     # 5. KNNWithMeans (user-based)
-    print(f"\n📐 Training KNNWithMeans (user-based)...")
+    print(f"\n Training KNNWithMeans (user-based)...")
     algo_knn2 = KNNWithMeans(k=40, sim_options={"name": "cosine", "user_based": True}, verbose=False)
     start = time.time()
     cv_knn2 = cross_validate(algo_knn2, data, measures=["RMSE", "MAE"], cv=5, verbose=True)
@@ -267,7 +267,7 @@ def benchmark_all_algorithms(data: Dataset) -> pd.DataFrame:
     df = df.sort_values("rmse_mean").reset_index(drop=True)
 
     print("\n" + "=" * 70)
-    print("📋 BENCHMARK RESULTS (sorted by RMSE)")
+    print(" BENCHMARK RESULTS (sorted by RMSE)")
     print("=" * 70)
     print(df.to_string(index=False))
     print("=" * 70)
@@ -280,7 +280,7 @@ def save_model(algo, filepath: str = "models/svd_model.pkl"):
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "wb") as f:
         pickle.dump(algo, f)
-    print(f"  💾 Model saved: {filepath}")
+    print(f"   Model saved: {filepath}")
 
 
 def load_model(filepath: str = "models/svd_model.pkl"):

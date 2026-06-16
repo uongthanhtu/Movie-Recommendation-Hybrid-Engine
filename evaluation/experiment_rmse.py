@@ -22,7 +22,7 @@ from pipeline.train_svd import build_surprise_data, train_svd
 def run_rmse_experiment(data_dir: str = "data/ml-100k", output_dir: str = "models"):
     """Run RMSE experiment with varying n_factors."""
     print("=" * 70)
-    print("📊 EXPERIMENT 1: RMSE vs n_factors")
+    print(" EXPERIMENT 1: RMSE vs n_factors")
     print("=" * 70)
 
     ratings = load_ratings(data_dir)
@@ -47,7 +47,7 @@ def run_rmse_experiment(data_dir: str = "data/ml-100k", output_dir: str = "model
     # Create DataFrame
     df = pd.DataFrame(results)
     print("\n" + "=" * 70)
-    print("📋 RESULTS TABLE")
+    print(" RESULTS TABLE")
     print("=" * 70)
     print(df[["n_factors", "n_epochs", "rmse_mean", "rmse_std", "mae_mean", "cv_time_seconds"]].to_string(index=False))
 
@@ -55,7 +55,7 @@ def run_rmse_experiment(data_dir: str = "data/ml-100k", output_dir: str = "model
     os.makedirs(output_dir, exist_ok=True)
     csv_path = os.path.join(output_dir, "experiment_rmse_results.csv")
     df.to_csv(csv_path, index=False)
-    print(f"\n💾 Results saved: {csv_path}")
+    print(f"\n Results saved: {csv_path}")
 
     # Plot
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
@@ -84,7 +84,7 @@ def run_rmse_experiment(data_dir: str = "data/ml-100k", output_dir: str = "model
     plt.tight_layout()
     chart_path = os.path.join(output_dir, "experiment_rmse_chart.png")
     plt.savefig(chart_path, dpi=150, bbox_inches="tight")
-    print(f"📈 Chart saved: {chart_path}")
+    print(f" Chart saved: {chart_path}")
     plt.close()
 
     return df

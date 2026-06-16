@@ -18,9 +18,9 @@ def get_redis_client(host: str = "localhost", port: int = 6379, db: int = 0) -> 
     r = redis.Redis(host=host, port=port, db=db, decode_responses=True)
     try:
         r.ping()
-        print(f"  ✅ Redis connected: {host}:{port}/{db}")
+        print(f"   Redis connected: {host}:{port}/{db}")
     except redis.ConnectionError:
-        print(f"  ⚠️  Redis not available at {host}:{port}. Results will NOT be cached.")
+        print(f"  ️  Redis not available at {host}:{port}. Results will NOT be cached.")
         return None
     return r
 
@@ -46,11 +46,11 @@ def push_recommendations(
         Number of users pushed
     """
     if r is None:
-        print("  ⚠️  Redis not available, skipping push.")
+        print("  ️  Redis not available, skipping push.")
         return 0
 
     if verbose:
-        print(f"\n⚡ Pushing recommendations to Redis...")
+        print(f"\n Pushing recommendations to Redis...")
 
     now = datetime.now().isoformat()
 
@@ -107,7 +107,7 @@ def push_popular(r: redis.Redis, popular_movies: list, ttl: int = 86400):
     if r is None:
         return
     r.set("reco:popular", json.dumps(popular_movies), ex=ttl)
-    print(f"  ✅ Popular movies pushed ({len(popular_movies)} movies)")
+    print(f"   Popular movies pushed ({len(popular_movies)} movies)")
 
 
 def push_model_metadata(
@@ -127,7 +127,7 @@ def push_model_metadata(
         "pushed_at": datetime.now().isoformat(),
     }
     r.set("model:metadata", json.dumps(metadata), ex=ttl)
-    print(f"  ✅ Model metadata pushed")
+    print(f"   Model metadata pushed")
 
 
 def flush_old_recommendations(r: redis.Redis):
@@ -137,4 +137,4 @@ def flush_old_recommendations(r: redis.Redis):
     keys = r.keys("reco:*")
     if keys:
         r.delete(*keys)
-        print(f"  🗑️  Flushed {len(keys)} old recommendation keys")
+        print(f"  ️  Flushed {len(keys)} old recommendation keys")

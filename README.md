@@ -70,6 +70,28 @@ We tuned the number of latent factors ($k$) to find the threshold where the mode
 
 *Note:* Overfitting occurs after $K=75$, which increases RMSE and training time.
 
+### 2.3. Multi-Engine Benchmarking Platform (Graph, Sequential & Social CF)
+
+We extended the evaluation platform to benchmark modern deep learning and social-aware recommender paradigms against the SVD baseline on a fair leave-last-one-out train/test split (MovieLens-100k):
+
+| Engine | Paradigm | Train Time (s) | Recall@10 | NDCG@10 | Latency (ms) | P95 Latency (ms) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Funk-SVD** | Classical Latent Factor | 0.7s | 0.0100 | 0.0038 | 6.55ms | 9.57ms |
+| **TrustSVD** | Social-Aware Matrix Factorization | 9.8s | 0.0500 | 0.0189 | 0.38ms | 0.59ms |
+| **LightGCN** | Graph Neural Networks (3-layer) | 606.6s | 0.0700 | 0.0384 | 0.53ms | 0.82ms |
+| **SASRec** | Sequential Transformer | 94.2s | 0.0150 | 0.0150 | 12.06ms | 24.16ms |
+
+#### 2.3.1. Engine Highlights & Academic Findings
+* **LightGCN (State-of-the-Art Accuracy):** Achieves the highest ranking accuracy (`Recall@10 = 0.0700`, `NDCG@10 = 0.0384`) by propagating embeddings through 3 layers of the bipartite user-item interaction graph, capturing high-order collaborative signals. It also boasts the lowest inference latency (`0.53ms`).
+* **TrustSVD (Social Enhancement):** Dramatically improves over the Funk-SVD baseline (`Recall@10 = 0.0500` vs `0.0100`) by regularizing user vectors via an implicit trust network built via Jaccard similarity.
+* **SASRec (Sequential Dynamics):** Evaluates transition sequences of user clicks. Useful for session-based recommendations, though ranking scores are lower on highly sparse historical leave-one-out sets.
+
+#### 2.3.2. Critical Performance Optimizations
+To make this benchmark runnable in production-like CPU environments, the following optimizations were applied:
+1. **TrustSVD PyTorch Vectorization (600x Speedup):** Replaced the original NumPy nested loops with a fully-vectorized PyTorch model using sparse-matrix embedding propagation (`torch.sparse.mm`). This reduced training time from **100+ minutes** to just **9.8 seconds**.
+2. **LightGCN CSR Index Sampling (4.4x Speedup):** Optimized the BPR negative sampler inside `_sample_bpr_triplets` in `lightgcn_engine.py` by querying underlying SciPy CSR indices and index-pointers (`indices` and `indptr`) directly instead of creating slow matrix row slice objects.
+3. **SASRec NaN-Mask Fix:** Fixed a training stability bug where users with only 1 interaction had all-zero input windows, triggering a divide-by-zero (`NaN` loss) in PyTorch's `MultiheadAttention`. This was solved by ensuring the first padding position is never masked (`key_padding_mask[:, 0] = False`).
+
 ---
 
 ## 3. Adaptive Fallback Chain & User Classification

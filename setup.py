@@ -31,7 +31,7 @@ def run_cmd(cmd: list, cwd: str = MOVIE_AGENT_DIR):
     print(f"  $ {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=cwd, capture_output=False)
     if result.returncode != 0:
-        print(f"  ❌ Command failed with exit code {result.returncode}")
+        print(f"   Command failed with exit code {result.returncode}")
         sys.exit(1)
 
 
