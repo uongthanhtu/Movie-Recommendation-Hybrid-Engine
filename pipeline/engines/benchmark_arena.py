@@ -25,6 +25,7 @@ from pipeline.engines.funk_svd_engine import FunkSVDEngine
 from pipeline.engines.trust_svd_engine import TrustSVDEngine
 from pipeline.engines.lightgcn_engine import LightGCNEngine
 from pipeline.engines.sasrec_engine import SASRecEngine
+from pipeline.engines.social_lightgcn_engine import SocialLightGCNEngine
 
 
 # ======================================================================
@@ -167,6 +168,10 @@ def run_arena(data_path: str = "data/ml-100k/u.data", k: int = 10) -> pd.DataFra
             num_users=num_users, num_items=num_items,
             embedding_dim=64, num_layers=3, n_epochs=30,
         ),
+        "Social-LightGCN": SocialLightGCNEngine(
+            num_users=num_users, num_items=num_items,
+            embedding_dim=64, num_layers=3, n_epochs=30,
+        ),
         "SASRec": SASRecEngine(
             num_items=num_items, max_seq_len=50, hidden_dim=50, n_epochs=30,
         ),
@@ -193,6 +198,11 @@ def run_arena(data_path: str = "data/ml-100k/u.data", k: int = 10) -> pd.DataFra
             engine.fit({
                 "sym_adj_mat": sym_adj_train,
                 "interaction_matrix": train_interaction,
+            })
+        elif name == "Social-LightGCN":
+            engine.fit({
+                "interaction_matrix": train_interaction,
+                "trust_matrix": all_data["trust_matrix"],
             })
         elif name == "SASRec":
             engine.fit(train_seq_windows)

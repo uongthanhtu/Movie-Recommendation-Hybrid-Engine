@@ -19,13 +19,15 @@ Our unified evaluation suite compares classical matrix factorization against mod
 
 | Engine | Paradigm | Train Time (s) | Recall@10 | NDCG@10 | Latency (ms) | P95 Latency (ms) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Funk-SVD** | Classical Latent Factor | 0.7s | 0.0100 | 0.0038 | 6.55ms | 9.57ms |
-| **TrustSVD** | Social-Aware MF | 3.8s | 0.0500 | 0.0189 | 0.38ms | 0.59ms |
-| **LightGCN** | Graph Neural Networks | 568.3s | **0.0700** ⭐ | **0.0384** ⭐ | **0.53ms** | **0.82ms** |
-| **SASRec** | Sequential Transformer | 94.2s | 0.0150 | 0.0150 | 12.06ms | 24.16ms |
+| **Funk-SVD** | Classical Latent Factor | 0.6s | 0.0050 | 0.0019 | 6.96ms | 10.05ms |
+| **TrustSVD** | Social-Aware MF | 7.1s | 0.0500 | 0.0189 | 0.29ms | 0.37ms |
+| **LightGCN** | Graph Neural Networks | 424.1s | 0.0700 | **0.0367** ⭐ | 0.66ms | 0.90ms |
+| **Social-LightGCN** (Proposed) | Early-Fusion Graph | 452.5s | **0.0750** ⭐ | 0.0313 | **0.23ms** | **0.29ms** |
+| **SASRec** | Sequential Transformer | 35.7s | 0.0150 | 0.0063 | 2.64ms | 3.51ms |
 
-* **LightGCN (State-of-the-Art):** Achieves the highest ranking accuracy and lowest online serving latency (0.53ms) by propagating embeddings through 3 layers of the bipartite user-item graph.
-* **TrustSVD (Social Enhancement):** Leverages Jaccard-based social trust network regularization, outperforming the baseline Funk-SVD by 5x on Recall@10.
+* **Social-LightGCN (State-of-the-Art / Proposed):** Achieves the highest Recall@10 accuracy (0.0750) and lowest online serving latency (0.23ms) by dynamically fusing collaborative and social signals at the embedding propagation level.
+* **LightGCN (Strong Baseline):** Achieves the highest NDCG@10 (0.0367) by propagating embeddings through 3 layers of the bipartite user-item graph structure.
+* **TrustSVD (Social Baseline):** Leverages Jaccard-based social trust network regularization, outperforming the baseline Funk-SVD by 10x on Recall@10.
 
 ### 2.2. Baseline Selection & Pre-checks (Surprise Library)
 Prior to selecting LightGCN, classical baselines were audited via 5-fold cross-validation. KNNBaseline yielded an RMSE of `0.9164`, while SVD ($K=50$) scored `0.9332` but trained 5x faster, establishing Funk-SVD as our core classical baseline.
@@ -92,6 +94,68 @@ To preserve the autoregressive property, a causal mask matrix $M \in \mathbb{R}^
 $$
 M_{i,j} = \begin{cases} 0 & \text{if } i \ge j \\ -\infty & \text{if } i < j \end{cases}
 $$
+
+### 4.3. Social-LightGCN Graph Collaborative Filtering with Social Trust Graph (Proposed Model)
+
+Our custom proposed model, **Social-LightGCN**, integrates collaborative signals and social networks directly at the graph propagation layer (Early Fusion) instead of blending scores at the API level (Late Fusion).
+
+#### Early-Fusion Embedding Propagation
+At each layer $k+1$, we propagate collaborative and social signals independently for each user $u$:
+
+$$
+\mathbf{e}_{u, CF}^{(k+1)} = \sum_{i \in \mathcal{N}_u} \frac{1}{\sqrt{|\mathcal{N}_u||\mathcal{N}_i|}} \mathbf{e}_i^{(k)} \quad ; \quad \mathbf{e}_{u, Social}^{(k+1)} = \sum_{v \in \mathcal{S}_u} \frac{1}{\sqrt{|\mathcal{S}_u||\mathcal{S}_v|}} \mathbf{e}_v^{(k)}
+$$
+
+where $\mathcal{S}_u$ represents the social connections (trusted neighbors) of user $u$ extracted from the trust network.
+
+#### Adaptive Attention Gate
+To fuse collaborative and social signals dynamically based on user preferences, an attention gate coefficient $\alpha_u$ is computed for each user:
+
+$$
+\alpha_u = \sigma \left( \mathbf{W}_{att} \cdot \left[ \mathbf{e}_{u, CF}^{(k+1)} \,\|\, \mathbf{e}_{u, Social}^{(k+1)} \right] + b_{att} \right)
+$$
+
+where $\cdot$ denotes matrix multiplication, $\|$ denotes concatenation, and $\sigma$ is the Sigmoid activation. The fused user embedding is updated as:
+
+$$
+\mathbf{e}_u^{(k+1)} = \alpha_u \mathbf{e}_{u, CF}^{(k+1)} + (1 - \alpha_u) \mathbf{e}_{u, Social}^{(k+1)}
+$$
+
+Items propagate embeddings through standard bipartite aggregation:
+
+$$
+\mathbf{e}_i^{(k+1)} = \sum_{u \in \mathcal{N}_i} \frac{1}{\sqrt{|\mathcal{N}_i||\mathcal{N}_u|}} \mathbf{e}_u^{(k+1)}
+$$
+
+#### Adaptive Multi-Task Learning (MTL) Loss
+We optimize the model end-to-end utilizing three learning objectives dynamically weighted by self-adaptive log-variances ($\eta_1, \eta_2, \eta_3$):
+
+$$
+\mathcal{L}_{Total} = \mathcal{L}_{BPR} + \mathcal{L}_{Rating} + \mathcal{L}_{Social} + \lambda_{reg} \|\Theta\|_2^2
+$$
+
+where:
+1. **Bayesian Personalized Ranking (BPR) Loss with Squashing scale**:
+
+$$
+\mathcal{L}_{BPR} = -\frac{1}{|\mathcal{U}|} \sum_{u \in \mathcal{U}} \ln \sigma \left( (y_{ui} - y_{uj}) \cdot e^{-\eta_1} \right) + 0.5 \eta_1
+$$
+
+2. **Explicit Rating Regression Loss**:
+
+$$
+\mathcal{L}_{Rating} = \frac{1}{2} e^{-\eta_2} \text{MSE}(\hat{r}_{ui}, r_{ui}) + 0.5 \eta_2
+$$
+
+where $\hat{r}_{ui} = \mu + b_u + b_i + \mathbf{e}_u^T \mathbf{e}_i$.
+
+3. **Social Graph Reconstruction Loss**:
+
+$$
+\mathcal{L}_{Social} = \frac{1}{2} e^{-\eta_3} \text{MSE}(\sigma(\mathbf{e}_u^T \mathbf{e}_v), s_{uv}) + 0.5 \eta_3
+$$
+
+where $s_{uv}$ represents Jaccard trust network weights between users $u$ and $v$.
 
 ---
 
