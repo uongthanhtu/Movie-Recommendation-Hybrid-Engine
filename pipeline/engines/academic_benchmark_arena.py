@@ -65,10 +65,18 @@ def evaluate_ranking(engine: Any, test_ratings: pd.DataFrame, num_items: int, k:
             test_dict[u] = set()
         test_dict[u].add(i)
 
+    # Sample at most 2000 users for fast evaluation if test set is large
+    eval_users = list(test_dict.keys())
+    if len(eval_users) > 2000:
+        rng = np.random.default_rng(42)
+        eval_users = rng.choice(eval_users, size=2000, replace=False)
+        print(f"    (Evaluation scaled: sampling {len(eval_users)} out of {len(test_dict)} test users for ranking metrics)")
+
     recalls = []
     ndcgs = []
 
-    for u, ground_truth in test_dict.items():
+    for u in eval_users:
+        ground_truth = test_dict[u]
         if not ground_truth:
             continue
 
@@ -93,6 +101,11 @@ def evaluate_ranking(engine: Any, test_ratings: pd.DataFrame, num_items: int, k:
 
 def evaluate_ratings(engine: Any, test_ratings: pd.DataFrame) -> Tuple[float, float]:
     """Calculate RMSE and MAE on test ratings."""
+    # Sample at most 10000 ratings for fast evaluation if test set is large
+    if len(test_ratings) > 10000:
+        test_ratings = test_ratings.sample(n=10000, random_state=42)
+        print(f"    (Evaluation scaled: sampling {len(test_ratings)} test ratings for error metrics)")
+
     predictions = []
     for _, row in test_ratings.iterrows():
         u = int(row["user_idx"])
@@ -138,6 +151,24 @@ def run_academic_benchmark(
     df_train, df_test = loader.split_data(df_ratings, ratio=0.8, seed=42)
     print(f"  Splitting ratings: Train={len(df_train):,} | Test={len(df_test):,}")
 
+    is_large = len(df_ratings) > 10000
+    if is_large:
+        tsv_epochs = 10
+        gcn_epochs = 10
+        gcn_batch_size = 65536
+        print(f"  [Large Dataset Detected] Using accelerated parameters:\n"
+              f"    - TrustSVD Epochs: {tsv_epochs}\n"
+              f"    - Social-LightGCN Epochs: {gcn_epochs}\n"
+              f"    - Social-LightGCN Batch Size: {gcn_batch_size}")
+    else:
+        tsv_epochs = 20
+        gcn_epochs = 20
+        gcn_batch_size = 256
+        print(f"  [Small Dataset Detected] Using default parameters:\n"
+              f"    - TrustSVD Epochs: {tsv_epochs}\n"
+              f"    - Social-LightGCN Epochs: {gcn_epochs}\n"
+              f"    - Social-LightGCN Batch Size: {gcn_batch_size}")
+
     # Build CSR matrices
     train_interaction = sp.csr_matrix(
         (df_train["rating"].values.astype(np.float32),
@@ -151,7 +182,7 @@ def run_academic_benchmark(
     engines = {
         "TrustSVD (Baseline)": TrustSVDEngine(
             n_factors=32, 
-            n_epochs=20, 
+            n_epochs=tsv_epochs, 
             lr=0.005, 
             reg=0.02
         ),
@@ -160,8 +191,8 @@ def run_academic_benchmark(
             num_items=num_items, 
             embedding_dim=32, 
             num_layers=3, 
-            n_epochs=20, 
-            batch_size=256
+            n_epochs=gcn_epochs, 
+            batch_size=gcn_batch_size
         )
     }
 
