@@ -45,3 +45,7 @@ data/ml-100k/mku.sh
 # --- IDE ---
 .vscode/
 .idea/
+
+# --- Academic Sandbox ---
+data/epinions/
+
