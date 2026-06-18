@@ -32,20 +32,25 @@ Our unified evaluation suite compares classical matrix factorization against mod
 ### 2.2. Baseline Selection & Pre-checks (Surprise Library)
 Prior to selecting LightGCN, classical baselines were audited via 5-fold cross-validation. KNNBaseline yielded an RMSE of `0.9164`, while SVD ($K=50$) scored `0.9332` but trained 5x faster, establishing Funk-SVD as our core classical baseline.
 
-### 2.3. Benchmark Hardware Environment & Re-running Recommendations
-All offline training, evaluation benchmarks, and online serving latencies were measured in the following environment:
+### 2.3. Benchmark Hardware Environment & Reproducibility
+All offline training, evaluation benchmarks, and online serving latencies were measured in the following local environment:
 
 * **Operating System:** Windows 11 Home / Linux Ubuntu 22.04 LTS
 * **Processor (CPU):** AMD Ryzen 7 5800H (8 Cores, 16 Threads @ 3.2GHz)
 * **System Memory (RAM):** 16 GB DDR4
 * **Graphics Processor (GPU):** NVIDIA RTX 3060 Laptop (6GB VRAM)
-* **Active Execution Device:** **CPU** (All baseline benchmarks were executed on CPU to establish a standard, accessible reproducibility baseline that runs on any generic machine).
+* **Framework Versions:** PyTorch 2.x with CUDA 11.8 / 12.x support.
+* **Active Execution Device:** **CPU** (All baseline benchmark times reported in Section 2.1 and 4.4 were strictly executed on CPU to establish a standard, accessible reproducibility baseline that runs on any generic machine).
 
 #### Re-running on CUDA (GPU Acceleration)
-The PyTorch-based engines (`LightGCN`, `Social-LightGCN`, and `SASRec`) automatically support **CUDA GPU acceleration** out of the box:
-* The codebase auto-detects GPU availability via `torch.cuda.is_available()`.
-* **Where to rerun:** You can execute these pipelines on any local workstation with an NVIDIA GPU, or cloud-hosted platforms such as **Google Colab (Free T4 GPU)**, **Kaggle**, **RunPod**, or **AWS EC2 (g4dn.xlarge)**.
-* **Performance Impact:** Transitioning from CPU to GPU yields an estimated **12x to 25x speedup** in training time, enabling you to easily scale training to 100+ epochs and process large-scale datasets (like full Yelp clickstream graphs) without CPU batch caps.
+The PyTorch-based engines (`LightGCN`, `Social-LightGCN`, and `SASRec`) automatically support **CUDA GPU acceleration** out of the box. The codebase auto-detects GPU availability via `torch.cuda.is_available()`.
+
+* **Performance Impact:** Transitioning from CPU to GPU yields an estimated **12x to 25x speedup** in training time, enabling you to easily scale training to 100+ epochs and process large-scale datasets (like Yelp) without bottlenecking.
+* **Cloud Execution:** You can execute these pipelines on local workstations with NVIDIA GPUs, or cloud-hosted platforms such as **Google Colab (Free T4 GPU)**, **Kaggle**, **RunPod**, or **AWS EC2 (g4dn.xlarge)**.
+* **⚠️ VRAM Memory Management (OOM Prevention):** While the 6GB VRAM of an RTX 3060 is more than enough for `CiaoDVD` and `MovieLens-100k`, training the large `Yelp` dataset (30K+ users) on GPU may trigger an `OutOfMemoryError`. To safely train on a 6GB GPU, strictly limit the batch size using the CLI flag:
+  ```bash
+  python -m pipeline.academic_sandbox.run_yelp_benchmark --device cuda --batch_size 4096
+  ```
 
 ---
 
