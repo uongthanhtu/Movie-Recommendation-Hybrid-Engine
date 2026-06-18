@@ -48,4 +48,9 @@ data/ml-100k/mku.sh
 
 # --- Academic Sandbox ---
 data/epinions/
+data/ciao/
+data/yelp/
+
+# --- PyTorch Models ---
+models/*.pth
 
