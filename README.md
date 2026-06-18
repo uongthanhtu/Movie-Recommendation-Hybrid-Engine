@@ -387,6 +387,26 @@ python -m app.main
 
 The server will start on **http://localhost:8000** with automatic degraded mode support if Redis is unavailable.
 
+### 8.5. Run Academic Benchmarks (SOTA Reproducibility)
+To validate our model against top-tier academic baselines (SEPT and DRSoRec), you can run the benchmark sandbox engines. 
+
+> [!NOTE]
+> **Automatic Data Fetching:** Both scripts below will automatically fetch, extract, and structure their respective datasets upon their first execution. There is no need for manual download.
+
+#### A. CiaoDVD Benchmark (DRSoRec Protocol - Section 4.4)
+Runs our `Social-LightGCN` alongside vanilla `LightGCN` and QRec's implementations on the **CiaoDVD** dataset (dense, 5-core filtered rating graph + trust network).
+```bash
+python -m pipeline.unified_arena.run_arena --epochs 50 --dim 64
+```
+*Options:* Use `--epochs` to change training duration (default is 50), `--dim` for embedding size (default 64), or `--k_core` to adjust density filtering (default 5).
+
+#### B. Yelp Benchmark (SEPT Protocol - Section 4.4)
+Runs our `Social-LightGCN` alongside vanilla `LightGCN` on the large **Yelp** dataset (sparse interaction graph + dense trust network).
+```bash
+python -m pipeline.academic_sandbox.run_yelp_benchmark --epochs 30 --dim 64
+```
+*Options:* Use `--epochs` to set epochs, `--dim` for embedding size, or `--batch_size` to modify mini-batch sizing.
+
 ---
 
 ## 9. API Endpoints
