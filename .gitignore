@@ -50,6 +50,7 @@ data/ml-100k/mku.sh
 data/epinions/
 data/ciao/
 data/yelp/
+data/filmtrust/
 
 # --- PyTorch Models ---
 models/*.pth
