@@ -28,20 +28,19 @@ The microservice operates in a framework-agnostic REST pattern. The primary back
 ## 2. Model Performance & Evaluation Benchmarks
 We evaluate our recommendation engines on a fair leave-last-one-out train/test split using the MovieLens-100k dataset.
 
-### 2.1. Multi-Engine Benchmarking Arena (Graph, Sequential & Social CF)
-Our unified evaluation suite compares classical matrix factorization against modern graph neural networks and sequential transformers:
+### 2.1. Classic Multi-Engine Benchmarking Arena (Graph, Sequential & Classical CF)
+Our Classic Arena compares **non-social** collaborative filtering paradigms — classical matrix factorization, graph neural networks, and sequential transformers — on MovieLens-100k:
 
 | Engine | Paradigm | Train Time (s) | Recall@10 | NDCG@10 | Latency (ms) | P95 Latency (ms) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Funk-SVD** | Classical Latent Factor | 0.6s | 0.0050 | 0.0019 | 6.96ms | 10.05ms |
-| **TrustSVD** | Social-Aware MF | 7.1s | 0.0500 | 0.0189 | 0.29ms | 0.37ms |
-| **LightGCN** | Graph Neural Networks | 424.1s | 0.0700 | **0.0367** ⭐ | 0.66ms | 0.90ms |
-| **Social-LightGCN** (Proposed) | Early-Fusion Graph | 452.5s | **0.0750** ⭐ | 0.0313 | **0.23ms** | **0.29ms** |
-| **SASRec** | Sequential Transformer | 35.7s | 0.0150 | 0.0063 | 2.64ms | 3.51ms |
+| **Funk-SVD** | Classical Latent Factor | 0.7s | 0.0100 | 0.0082 | 5.83ms | 8.08ms |
+| **LightGCN** | Graph Neural Networks | 285.2s | **0.0700** ⭐ | **0.0383** ⭐ | 0.22ms | 0.33ms |
+| **SASRec** | Sequential Transformer | 32.4s | 0.0050 | 0.0025 | 2.18ms | 2.40ms |
 
-* **Social-LightGCN (State-of-the-Art / Proposed):** Achieves the highest Recall@10 accuracy (0.0750) and lowest online serving latency (0.23ms) by dynamically fusing collaborative and social signals at the embedding propagation level.
-* **LightGCN (Strong Baseline):** Achieves the highest NDCG@10 (0.0367) by propagating embeddings through 3 layers of the bipartite user-item graph structure.
-* **TrustSVD (Social Baseline):** Leverages Jaccard-based social trust network regularization, outperforming the baseline Funk-SVD by 10x on Recall@10.
+* **LightGCN (Strong Baseline):** Achieves the highest Recall@10 (0.0700) and NDCG@10 (0.0383) by propagating embeddings through 3 layers of the bipartite user-item graph structure.
+* **Funk-SVD / SASRec:** Classical and sequential baselines respectively, included to contextualize the graph-based approach's gains.
+
+> **Where are TrustSVD and Social-LightGCN?** Social-Aware models are **not** benchmarked on MovieLens. See §2.4 for why, and where they're evaluated instead.
 
 ### 2.2. Baseline Selection & Pre-checks (Surprise Library)
 Prior to selecting LightGCN, classical baselines were audited via 5-fold cross-validation. KNNBaseline yielded an RMSE of `0.9164`, while SVD ($K=50$) scored `0.9332` but trained 5x faster, establishing Funk-SVD as our core classical baseline.
@@ -71,6 +70,35 @@ It is important to note the hardware context of the current benchmark results:
 * **Current Execution:** All reported training metrics for Social-LightGCN in this repository were run on a **local CPU** (AMD Ryzen 7 5800H) with capped batch sizes and limited epochs (e.g., 15-30 epochs) to prevent memory overflow on consumer hardware.
 * **Impact on Accuracy:** Because the *Adaptive Attention Gate* requires substantial gradient steps to fully calibrate per-user social influence, the restricted CPU training inherently caps the model's potential. The slight drop in `Recall@10` is a direct symptom of early stopping and under-training.
 * **Next Steps (GPU Scaling):** For full academic replication, the pipeline is fully CUDA-compatible. Running this architecture on a Cloud GPU (e.g., Google Colab T4 / AWS EC2) for 500+ epochs is expected to eliminate the K=10 precision drop and fully unleash the model's capacity.
+
+### 2.4. Social-Aware Arena (FilmTrust — Explicit Trust)
+A mentor review flagged a strict academic-validity gap: MovieLens-100k has no real social
+graph, so our prior comparison evaluated TrustSVD and Social-LightGCN against a "trust"
+matrix fabricated via Jaccard similarity over co-interacted items
+(`unified_data_loader.py::build_implicit_trust_matrix`). That is a collaborative-filtering
+signal, not a trust network — it cannot isolate what social regularization actually
+contributes, so it is not a valid benchmark for Social-Aware models.
+
+To fix this, Social-Aware models are now benchmarked exclusively on **FilmTrust**
+(Guo, Zhang & Yorke-Smith, IJCAI 2013), sourced directly from the
+[LibRec GitHub repository](https://github.com/guoguibing/librec/tree/master/librec/demo/Datasets/FilmTrust):
+35,497 explicit ratings from 1,508 users on 2,071 films, plus 1,853 **directed, user-asserted**
+trust edges (symmetrized for GCN propagation). No Jaccard or any other derived-trust step is
+used anywhere in this pipeline.
+
+| Engine | Social Signal | Train Time (s) | Recall@10 | NDCG@10 | Latency (ms) | P95 Latency (ms) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **LightGCN** (No-Social Baseline) | None | 37.8s | 0.6349 | 0.5253 | 0.28ms | 0.35ms |
+| **TrustSVD** | Explicit Trust (regularization) | 1.2s | 0.3475 | 0.3056 | 0.20ms | 0.26ms |
+| **Social-LightGCN** (Proposed) | Explicit Trust (graph propagation) | 45.0s | 0.5513 | 0.4543 | 0.24ms | 0.33ms |
+
+*Run `python -m pipeline.filmtrust_arena.run_filmtrust` to reproduce. See `pipeline/filmtrust_arena/` for the loader and orchestrator.*
+
+In this run, the no-social `LightGCN` baseline leads both Social-Aware models on Recall@10
+and NDCG@10. Under the current capped-epoch CPU training budget (see the notice above), this
+is an honest empirical result, not a win to spin for the proposed models — it is worth
+investigating further with more training epochs or GPU-scale training before drawing
+conclusions about whether explicit trust signal helps on this dataset.
 
 ---
 
@@ -385,6 +413,9 @@ movie_agent/
 │   │   ├── yelp_data_loader.py      # QRec Yelp downloader and stratified splitter
 │   │   ├── model_wrappers.py        # Yelp-optimized model training wrappers
 │   │   └── run_yelp_benchmark.py    # Yelp benchmark orchestrator
+│   ├── filmtrust_arena/             # Social Arena -- Explicit Trust (Section 2.4)
+│   │   ├── filmtrust_loader.py      # FilmTrust downloader, explicit-trust CSR builder
+│   │   └── run_filmtrust.py         # LightGCN vs. TrustSVD vs. Social-LightGCN orchestrator
 │   └── hybrid_recommender.py        # Online hybrid blending and diversity engine
 ├── evaluation/
 │   ├── experiment_comparison.py     # Pre-check audits for classical baselines
@@ -446,6 +477,13 @@ Runs our `Social-LightGCN` alongside vanilla `LightGCN` on the large **Yelp** da
 python -m pipeline.academic_sandbox.run_yelp_benchmark --epochs 30 --dim 64
 ```
 *Options:* Use `--epochs` to set epochs, `--dim` for embedding size, or `--batch_size` to modify mini-batch sizing.
+
+### 8.6. Run the Social Arena (FilmTrust — Explicit Trust, Section 2.4)
+Runs `LightGCN` (no-social baseline), `TrustSVD`, and `Social-LightGCN` against FilmTrust's real, explicit trust network (auto-downloaded on first run, no manual setup needed):
+```bash
+python -m pipeline.filmtrust_arena.run_filmtrust --epochs 30 --dim 64 -k 10
+```
+*Options:* Use `--epochs` to set epochs, `--dim` for embedding size, `--layers` for GCN depth, or `-k` for the Recall@K/NDCG@K cutoff.
 
 ---
 
