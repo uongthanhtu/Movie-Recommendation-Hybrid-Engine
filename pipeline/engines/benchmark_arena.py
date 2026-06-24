@@ -1,11 +1,17 @@
 """
-Benchmark Arena — Multi-engine evaluation orchestrator.
+Benchmark Arena — Multi-engine evaluation orchestrator (Classic Arena).
 
-Runs all 4 engines on the same dataset splits, measures:
+Compares non-social engines (Funk-SVD, LightGCN, SASRec) on MovieLens-100k, measures:
   - RMSE / MAE (rating prediction accuracy)
   - Recall@K / NDCG@K (ranking quality)
   - ILD@K (intra-list diversity)
   - Latency (inference speed per user)
+
+Social-Aware models (TrustSVD, Social-LightGCN) are intentionally NOT benchmarked here:
+MovieLens has no real social graph, and fabricating one via Jaccard similarity on
+co-interacted items (see unified_data_loader.py::build_implicit_trust_matrix) is not a
+scientifically valid trust network. Those models are evaluated instead in
+pipeline/filmtrust_arena/run_filmtrust.py against FilmTrust's real, explicit trust data.
 
 Usage:
     python -m pipeline.engines.benchmark_arena
@@ -22,10 +28,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from pipeline.engines.unified_data_loader import UnifiedDataLoader
 from pipeline.engines.funk_svd_engine import FunkSVDEngine
-from pipeline.engines.trust_svd_engine import TrustSVDEngine
 from pipeline.engines.lightgcn_engine import LightGCNEngine
 from pipeline.engines.sasrec_engine import SASRecEngine
-from pipeline.engines.social_lightgcn_engine import SocialLightGCNEngine
 
 
 # ======================================================================
@@ -163,12 +167,7 @@ def run_arena(data_path: str = "data/ml-100k/u.data", k: int = 10) -> pd.DataFra
     print("\n  Initializing engines...")
     engines: Dict[str, Any] = {
         "Funk-SVD": FunkSVDEngine(n_factors=50, n_epochs=20),
-        "TrustSVD": TrustSVDEngine(n_factors=50, n_epochs=30, lr=0.005, reg=0.02),
         "LightGCN": LightGCNEngine(
-            num_users=num_users, num_items=num_items,
-            embedding_dim=64, num_layers=3, n_epochs=30,
-        ),
-        "Social-LightGCN": SocialLightGCNEngine(
             num_users=num_users, num_items=num_items,
             embedding_dim=64, num_layers=3, n_epochs=30,
         ),
@@ -189,20 +188,10 @@ def run_arena(data_path: str = "data/ml-100k/u.data", k: int = 10) -> pd.DataFra
 
         if name == "Funk-SVD":
             engine.fit(train_df)
-        elif name == "TrustSVD":
-            engine.fit({
-                "interaction_matrix": train_interaction,
-                "trust_matrix": all_data["trust_matrix"],
-            })
         elif name == "LightGCN":
             engine.fit({
                 "sym_adj_mat": sym_adj_train,
                 "interaction_matrix": train_interaction,
-            })
-        elif name == "Social-LightGCN":
-            engine.fit({
-                "interaction_matrix": train_interaction,
-                "trust_matrix": all_data["trust_matrix"],
             })
         elif name == "SASRec":
             engine.fit(train_seq_windows)
