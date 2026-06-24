@@ -125,3 +125,54 @@ DATASET_REGISTRY: Dict[str, DatasetConfig] = {
     "yelp": YELP_CONFIG,
     "filmtrust": FILMTRUST_CONFIG,
 }
+
+
+@dataclass
+class ImplicitDatasetConfig:
+    """
+    Declarative configuration for ImplicitTrustLoader (Mode B / ablation study).
+
+    Unlike DatasetConfig, there is no trust_urls/trust_filenames -- trust is
+    synthesized via Jaccard similarity (pipeline/utils/sparse_jaccard.py), not
+    downloaded. This is intentionally a separate dataclass from DatasetConfig rather
+    than an extension of it, to avoid either type carrying fields that are always
+    irrelevant/None for the other's use case.
+
+    Fields:
+        name, data_dir: same meaning as DatasetConfig.
+        ratings_urls, ratings_filenames: same meaning as DatasetConfig.
+        delimiter: "space" handles ML-100K's tab-delimited u.data correctly, since
+            Python's str.split() with no argument splits on any whitespace run
+            (including tabs) -- the same "space" mode DatasetConfig already uses.
+        rating_col_index: column index of the rating value in a parsed row.
+            ML-100K's "user item rating timestamp" layout puts it at index 2.
+        k_core: minimum interactions per user/item. None for ML-100K -- GroupLens
+            already guarantees every user has >=20 ratings.
+        jaccard_threshold, jaccard_top_k, jaccard_chunk_size: passed directly to
+            compute_sparse_jaccard_trust (pipeline/utils/sparse_jaccard.py).
+        test_ratio, seed: same meaning as DatasetConfig.
+    """
+    name: str
+    data_dir: str
+    ratings_urls: List[str]
+    ratings_filenames: List[str]
+    delimiter: str = "space"
+    rating_col_index: int = 2
+    k_core: Optional[int] = None
+    jaccard_threshold: float = 0.3
+    jaccard_top_k: Optional[int] = 50
+    jaccard_chunk_size: int = 2000
+    test_ratio: float = 0.2
+    seed: int = 42
+
+
+ML_100K_CONFIG = ImplicitDatasetConfig(
+    name="ml-100k",
+    data_dir="data/ml-100k",
+    ratings_urls=["https://files.grouplens.org/datasets/movielens/ml-100k.zip"],
+    ratings_filenames=["u.data"],
+)
+
+IMPLICIT_DATASET_REGISTRY: Dict[str, ImplicitDatasetConfig] = {
+    "ml-100k": ML_100K_CONFIG,
+}
