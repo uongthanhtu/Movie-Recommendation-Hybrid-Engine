@@ -178,13 +178,19 @@ class ExplicitTrustLoader(BaseDatasetLoader):
     def _build_social_matrix(
         df_trust, user_map: Dict[str, int], n_users: int
     ) -> sp.csr_matrix:
-        """Build symmetric undirected trust matrix: A = A_raw + A_raw^T, clipped binary."""
+        """Build symmetric undirected trust matrix: A = A_raw + A_raw^T, clipped binary.
+
+        Self-loop rows (src == dst) are dropped before construction -- a self-trust
+        edge would otherwise survive symmetrization as a nonzero diagonal entry,
+        violating the zero-diagonal invariant every consumer of social_csr assumes.
+        """
         df = df_trust.copy()
         df["s_idx"] = df["src"].map(user_map)
         df["d_idx"] = df["dst"].map(user_map)
         df = df.dropna(subset=["s_idx", "d_idx"])
         df["s_idx"] = df["s_idx"].astype(int)
         df["d_idx"] = df["d_idx"].astype(int)
+        df = df[df["s_idx"] != df["d_idx"]]
 
         if len(df) == 0:
             return sp.csr_matrix((n_users, n_users), dtype=np.float32)
