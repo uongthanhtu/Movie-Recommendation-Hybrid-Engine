@@ -129,10 +129,27 @@ FILMTRUST_CONFIG = DatasetConfig(
     seed=42,
 )
 
+EPINIONS_CONFIG = DatasetConfig(
+    name="epinions",
+    data_dir="data/epinions",
+    ratings_urls=["https://static.preferred.ai/cornac/datasets/epinions/ratings_data.zip"],
+    trust_urls=["https://static.preferred.ai/cornac/datasets/epinions/trust_data.zip"],
+    ratings_filenames=["ratings_data.txt"],
+    trust_filenames=["trust_data.txt"],
+    delimiter="space",
+    k_core=5,
+    feedback_mode="explicit",
+    rating_threshold=0.0,
+    filter_negative_trust=True,
+    test_ratio=0.2,
+    seed=42,
+)
+
 DATASET_REGISTRY: Dict[str, DatasetConfig] = {
     "ciao": CIAO_CONFIG,
     "yelp": YELP_CONFIG,
     "filmtrust": FILMTRUST_CONFIG,
+    "epinions": EPINIONS_CONFIG,
 }
 
 
