@@ -64,6 +64,11 @@ class ExplicitTrustLoader(BaseDatasetLoader):
         df_ratings = lu.parse_rows(self._ratings_path, cfg.delimiter, cfg.explicit_rating_col_index, ("user", "item", "rating"))
         df_trust = lu.parse_rows(self._trust_path, cfg.delimiter, cfg.explicit_rating_col_index, ("src", "dst", "weight"))
 
+        if cfg.filter_negative_trust:
+            n_trust_before = len(df_trust)
+            df_trust = df_trust[df_trust["weight"] > 0].copy()
+            print(f"    Filtered distrust: {n_trust_before:,} -> {len(df_trust):,} trust edges", flush=True)
+
         n_raw = len(df_ratings)
         n_raw_users = df_ratings["user"].nunique()
         n_raw_items = df_ratings["item"].nunique()
@@ -149,12 +154,15 @@ class ExplicitTrustLoader(BaseDatasetLoader):
         lu.download_with_fallback(unique_urls, cfg.data_dir, cfg.name, "ExplicitTrustLoader")
 
         if not (lu.files_exist(cfg.data_dir, cfg.ratings_filenames) and lu.files_exist(cfg.data_dir, cfg.trust_filenames)):
-            raise RuntimeError(
+            generic_message = (
                 f"Could not obtain a usable ratings/trust file for '{cfg.name}' from any "
                 f"configured URL.\nManual fallback: place files named one of "
                 f"{cfg.ratings_filenames} (ratings) and {cfg.trust_filenames} (trust) "
                 f"directly into {cfg.data_dir}."
             )
+            if cfg.manual_download_instructions:
+                raise lu.ManualDownloadRequiredError(f"{generic_message}\n\n{cfg.manual_download_instructions}")
+            raise lu.ManualDownloadRequiredError(generic_message)
 
     def _resolve_paths(self) -> None:
         cfg = self.config

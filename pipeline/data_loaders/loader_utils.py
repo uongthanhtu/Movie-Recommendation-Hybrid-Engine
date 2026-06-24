@@ -19,6 +19,17 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
+
+class ManualDownloadRequiredError(RuntimeError):
+    """
+    Raised when a dataset's files cannot be obtained via automated download --
+    either no URLs are configured, or every configured URL failed -- and must be
+    placed manually. Subclasses RuntimeError for compatibility with any existing
+    generic exception handling. Both ExplicitTrustLoader and ImplicitTrustLoader
+    raise this same class so callers only need to catch one exception type.
+    """
+
+
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "

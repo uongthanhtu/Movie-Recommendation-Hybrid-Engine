@@ -44,6 +44,15 @@ class DatasetConfig:
             whose raw values are already binary, so passthrough is a no-op).
         rating_threshold: only consulted when feedback_mode == "threshold_binarize".
         test_ratio, seed: stratified per-user train/test split parameters.
+        manual_download_instructions: extra text folded into ManualDownloadRequiredError's
+            message when automated download fails (e.g. a dead-mirror citation and a
+            contact for manual access). Empty string (default) falls back to the
+            generic "place files named X into Y" message only.
+        filter_negative_trust: if True, drop trust rows with weight <= 0 before the
+            union-of-users computation and before building social_csr -- for datasets
+            where a negative weight encodes explicit distrust (Epinions), as opposed
+            to a plain undirected friendship/trust concept with no distrust notion
+            (Ciao, Yelp, FilmTrust, Douban). Defaults to False (no-op) for all of them.
     """
     name: str
     data_dir: str
@@ -58,6 +67,8 @@ class DatasetConfig:
     rating_threshold: float = 0.0
     test_ratio: float = 0.2
     seed: int = 42
+    manual_download_instructions: str = ""
+    filter_negative_trust: bool = False
 
 
 CIAO_CONFIG = DatasetConfig(
@@ -65,11 +76,9 @@ CIAO_CONFIG = DatasetConfig(
     data_dir="data/ciao",
     ratings_urls=[
         "https://guoguibing.github.io/librec/datasets/CiaoDVD.zip",
-        "https://raw.githubusercontent.com/daicoolb/RecommenderSystem-DataSet/master/CiaoDVD/CiaoDVD.zip",
     ],
     trust_urls=[
         "https://guoguibing.github.io/librec/datasets/CiaoDVD.zip",
-        "https://raw.githubusercontent.com/daicoolb/RecommenderSystem-DataSet/master/CiaoDVD/CiaoDVD.zip",
     ],
     ratings_filenames=["movie-ratings.txt", "ratings.txt"],
     trust_filenames=["trusts.txt"],

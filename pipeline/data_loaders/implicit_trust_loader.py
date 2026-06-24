@@ -138,7 +138,7 @@ class ImplicitTrustLoader(BaseDatasetLoader):
         lu.download_with_fallback(cfg.ratings_urls, cfg.data_dir, cfg.name, "ImplicitTrustLoader")
 
         if not lu.files_exist(cfg.data_dir, cfg.ratings_filenames):
-            raise RuntimeError(
+            raise lu.ManualDownloadRequiredError(
                 f"Could not obtain a usable ratings file for '{cfg.name}' from any "
                 f"configured URL.\nManual fallback: place a file named one of "
                 f"{cfg.ratings_filenames} directly into {cfg.data_dir}."
