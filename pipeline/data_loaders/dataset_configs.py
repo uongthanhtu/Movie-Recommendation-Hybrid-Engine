@@ -145,11 +145,40 @@ EPINIONS_CONFIG = DatasetConfig(
     seed=42,
 )
 
+DOUBAN_CONFIG = DatasetConfig(
+    name="douban",
+    data_dir="data/douban",
+    ratings_urls=[],
+    trust_urls=[],
+    ratings_filenames=["uir.index", "ratings.txt"],
+    trust_filenames=["social.index", "trust.txt"],
+    delimiter="space",
+    k_core=5,
+    feedback_mode="explicit",
+    rating_threshold=0.0,
+    filter_negative_trust=False,
+    test_ratio=0.2,
+    seed=42,
+    manual_download_instructions=(
+        "Douban (Hao Ma et al., 'Recommender systems with social regularization', "
+        "WSDM 2011) has no working automated download as of 2026-06-24: the "
+        "original CUHK source (cse.cuhk.edu.hk/irwin.king/pub/data/douban) and its "
+        "'.new' variant both return 404, and the ASU Social Computing Data "
+        "Repository mirror (socialcomputing.asu.edu) is offline. The dataset's own "
+        "description directs manual requests to 113333244@qq.com. Once obtained, "
+        "place 'uir.index' (format: UserId ItemId Rating) and 'social.index' "
+        "(format: UserId1 UserId2) into data/douban/. NOTE: this column layout is "
+        "from secondary documentation, not a primary file inspection -- verify it "
+        "against the real file before trusting any benchmark numbers."
+    ),
+)
+
 DATASET_REGISTRY: Dict[str, DatasetConfig] = {
     "ciao": CIAO_CONFIG,
     "yelp": YELP_CONFIG,
     "filmtrust": FILMTRUST_CONFIG,
     "epinions": EPINIONS_CONFIG,
+    "douban": DOUBAN_CONFIG,
 }
 
 
