@@ -33,8 +33,9 @@ class ArenaDataset:
             "explicit".
         test_dict, train_dict: {user_idx: set(item_idx)} for ranking evaluation.
         social_csr: (num_users, num_users) CSR, symmetric trust/social graph.
-        mode: "explicit" (real trust data) or "implicit" (Jaccard-derived, Mode B --
-            not produced by any loader yet; reserved for a future sub-project).
+        mode: "explicit" (real trust data, produced by ExplicitTrustLoader) or
+            "implicit" (Jaccard-derived, Mode B ablation study, produced by
+            ImplicitTrustLoader).
     """
     num_users: int
     num_items: int
