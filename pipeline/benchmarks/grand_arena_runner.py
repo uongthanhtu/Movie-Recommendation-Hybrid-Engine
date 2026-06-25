@@ -140,7 +140,8 @@ def _render_markdown(results: _Results) -> str:
                     f"| {row.train_seconds:.1f} | {row.latency_ms:.2f} |"
                 )
             else:
-                lines.append(f"| {row.model} | FAILED | FAILED | FAILED | FAILED ({row.note}) |")
+                safe_note = row.note.replace("|", "\\|").replace("\n", " ")
+                lines.append(f"| {row.model} | FAILED | FAILED | FAILED | FAILED ({safe_note}) |")
         lines.append("")
 
     if results.skipped:
