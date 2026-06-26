@@ -211,8 +211,8 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         reg: float = 1e-4,
         n_epochs: int = 30,
         batch_size: int = 2048,
-        temperature: float = 0.2,
-        ssl_weight: float = 0.05,
+        temperature: float = 0.5,
+        ssl_weight: float = 0.005,
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.num_users = num_users
