@@ -1,19 +1,22 @@
 """
-Social-LightGCN Engine — Late-Fusion Social-Aware Graph Convolutional Network for
-recommendation (PyTorch).
+Social-LightGCN Engine — Social Contrastive Learning (SCL) for recommendation
+(PyTorch).
 
-Trains two fully independent embedding spaces -- one propagated over the bipartite
-user-item (CF) graph, one propagated over the user-user (Social) graph -- and fuses
-them exactly once, after propagation, via a learned per-user Attention Gate
-(Late Fusion). This replaces the prior per-layer Early-Fusion architecture (sub-project
-6 and earlier), which mixed CF and Social signals at every propagation hop and let
-social noise pollute the collaborative-filtering signal before either had formed a
-clean representation on its own. With the two graphs never touching during
-propagation, the gate can degrade to pure LightGCN (alpha=1 for every user) whenever
-the social signal is unhelpful for a given dataset.
+Propagates two fully independent embedding spaces -- one over the bipartite
+user-item (CF) graph, one over the user-user (Social) graph -- exactly as the prior
+Late-Fusion architecture (sub-project 7) did. The difference is what happens after
+propagation: there is no longer any fusion step. The CF embedding (E_user_cf) is used
+DIRECTLY and EXCLUSIVELY for BPR ranking and inference; the social embedding
+(E_user_social) never participates in any prediction. Instead, the social branch acts
+purely as a self-supervised regularizer: an InfoNCE contrastive loss pulls each user's
+CF embedding toward their own social embedding (the positive pair) and away from other
+users' social embeddings (in-batch negatives), forcing E_user_cf to indirectly absorb
+social topology through gradient alone -- never through message-passing, since the
+two graphs are never combined or co-propagated.
 
-Optimized purely via the standard BPR ranking loss plus L2 weight decay -- no
-multi-task loss, no learned uncertainty weights, no social-reconstruction term.
+This sidesteps Late-Fusion's gate entirely (no per-user alpha to learn or interpret)
+at the cost of losing the gate's per-user ability to suppress an unhelpful social
+signal -- ssl_weight is a single global scalar, not an adaptive one.
 
 Technical contract inherited from BaseRecommenderEngine.
 """
@@ -34,10 +37,11 @@ from pipeline.engines.base_engine import BaseRecommenderEngine
 
 class SocialLightGCNModel(nn.Module):
     """
-    Late-Fusion Social-LightGCN PyTorch neural network.
+    Social Contrastive Learning (SCL) PyTorch neural network.
     Propagates collaborative (user-item) and social (user-user) signals over two
-    fully independent embedding spaces, then fuses the resulting user representations
-    exactly once via a learned per-user Attention Gate.
+    fully independent embedding spaces. Unlike the prior Late-Fusion architecture,
+    there is no fusion step in forward() at all -- both branches' outputs are returned
+    separately for the engine to combine into BPR + InfoNCE losses during training.
     """
 
     def __init__(
@@ -50,21 +54,16 @@ class SocialLightGCNModel(nn.Module):
         super().__init__()
         self.num_layers = num_layers
 
-        # CF branch embeddings (bipartite user-item graph)
+        # CF branch embeddings (bipartite user-item graph) -- used directly for BPR
         self.user_emb_cf = nn.Embedding(num_users, embedding_dim)
         self.item_emb_cf = nn.Embedding(num_items, embedding_dim)
         nn.init.xavier_uniform_(self.user_emb_cf.weight)
         nn.init.xavier_uniform_(self.item_emb_cf.weight)
 
-        # Social branch embeddings (user-user graph only -- no items)
+        # Social branch embeddings (user-user graph only -- no items, no prediction
+        # role; exists solely as the InfoNCE loss's "social view" of each user)
         self.user_emb_social = nn.Embedding(num_users, embedding_dim)
         nn.init.xavier_uniform_(self.user_emb_social.weight)
-
-        # Late-Fusion Attention Gate (applied once, after both branches propagate --
-        # NOT per-layer, unlike the prior early-fusion architecture)
-        self.W_att = nn.Linear(embedding_dim * 2, 1)
-        nn.init.xavier_uniform_(self.W_att.weight)
-        nn.init.zeros_(self.W_att.bias)
 
     def forward(
         self,
@@ -73,7 +72,8 @@ class SocialLightGCNModel(nn.Module):
         adj_social: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Propagate the CF and Social branches independently, then fuse once.
+        Propagate the CF and Social branches independently. No fusion step -- the
+        engine combines these via BPR (CF only) and InfoNCE (CF vs Social) losses.
 
         Args:
             adj_ui: Normalized user-item sparse interaction matrix [U, I]
@@ -81,9 +81,7 @@ class SocialLightGCNModel(nn.Module):
             adj_social: Normalized user-user sparse social trust matrix [U, U]
 
         Returns:
-            (E_user_final, E_item_cf, alpha) -- alpha has shape [U, 1], returned for
-            diagnostic logging (mean alpha shows how much weight the gate places on
-            the CF branch on average).
+            (E_user_cf, E_item_cf, E_user_social)
         """
         # --- CF branch: standard LightGCN bipartite propagation ---
         u_cf = self.user_emb_cf.weight
@@ -106,12 +104,7 @@ class SocialLightGCNModel(nn.Module):
             u_social_list.append(u_social)
         E_user_social = torch.stack(u_social_list, dim=0).mean(dim=0)
 
-        # --- Late-Fusion Attention Gate (applied exactly once) ---
-        cat_feats = torch.cat([E_user_cf, E_user_social], dim=1)  # [U, d*2]
-        alpha = torch.sigmoid(self.W_att(cat_feats))              # [U, 1]
-        E_user_final = alpha * E_user_cf + (1.0 - alpha) * E_user_social
-
-        return E_user_final, E_item_cf, alpha
+        return E_user_cf, E_item_cf, E_user_social
 
 
 # ======================================================================
@@ -158,6 +151,36 @@ def _sample_training_batch(
     return users, pos_items, neg_items
 
 
+def _info_nce_loss(
+    emb_cf: torch.Tensor,
+    emb_social: torch.Tensor,
+    user_ids: torch.Tensor,
+    temperature: float,
+) -> torch.Tensor:
+    """
+    InfoNCE contrastive loss between a user's CF view and Social view.
+
+    For each user u in the batch, (emb_cf[u], emb_social[u]) is the positive pair;
+    (emb_cf[u], emb_social[v]) for every other user v in the batch is a negative
+    pair (in-batch negatives). Implemented as cosine-similarity logits fed through
+    cross_entropy against the diagonal -- mathematically identical to
+    -log(exp(sim(pos)/tau) / sum(exp(sim(all)/tau))), fully vectorized, no Python
+    loop over users.
+
+    user_ids is deduplicated via torch.unique() before building the similarity
+    matrix: _sample_training_batch samples with replacement, so a batch can contain
+    the same user twice -- without deduplication, a repeated user would be scored as
+    a "negative" against itself, corrupting the loss.
+    """
+    unique_users = torch.unique(user_ids)
+    cf_view = F.normalize(emb_cf[unique_users], dim=1)
+    social_view = F.normalize(emb_social[unique_users], dim=1)
+
+    sim_matrix = torch.matmul(cf_view, social_view.T) / temperature  # [N, N]
+    labels = torch.arange(sim_matrix.size(0), device=sim_matrix.device)
+    return F.cross_entropy(sim_matrix, labels)
+
+
 def _sparse_scipy_to_torch(mat: sp.csr_matrix, device: torch.device) -> torch.Tensor:
     """Convert a SciPy CSR matrix to a PyTorch sparse COO tensor on specified device."""
     coo = mat.tocoo().astype(np.float32)
@@ -173,9 +196,9 @@ def _sparse_scipy_to_torch(mat: sp.csr_matrix, device: torch.device) -> torch.Te
 
 class SocialLightGCNEngine(BaseRecommenderEngine):
     """
-    Social-LightGCN Engine using Late-Fusion Attention Gating: two independent
-    embedding spaces (CF, Social), fused once per forward pass, trained purely via
-    BPR + L2 weight decay.
+    Social-LightGCN Engine using Social Contrastive Learning: the CF branch is used
+    directly for BPR ranking; the social branch supplies gradient only, via an
+    InfoNCE loss that pulls the CF embedding toward social topology.
     """
 
     def __init__(
@@ -188,6 +211,8 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         reg: float = 1e-4,
         n_epochs: int = 30,
         batch_size: int = 2048,
+        temperature: float = 0.2,
+        ssl_weight: float = 0.05,
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.num_users = num_users
@@ -197,6 +222,8 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         self.reg = reg
         self.n_epochs = n_epochs
         self.batch_size = batch_size
+        self.temperature = temperature
+        self.ssl_weight = ssl_weight
 
         self.model = SocialLightGCNModel(
             num_users, num_items, embedding_dim, num_layers
@@ -211,15 +238,17 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         # Raw user-item interaction matrix
         self._interaction_csr: sp.csr_matrix = sp.csr_matrix((0, 0))
 
-        # Latent representations readout cache (E_user_final, E_item_cf)
+        # Latent representations readout cache (E_user_cf, E_item_cf -- the social
+        # embedding is never needed at inference time, only during training)
         self._user_emb: torch.Tensor = torch.empty(0)
         self._item_emb: torch.Tensor = torch.empty(0)
 
     def fit(self, data: Any) -> None:
         """
-        Train via Late-Fusion: propagate the CF and Social branches independently,
-        fuse once per forward pass via the learned gate, optimize purely through the
-        BPR ranking objective plus L2 weight decay.
+        Train via Social Contrastive Learning: propagate the CF and Social branches
+        independently; optimize the CF branch directly through BPR + L2, and pull it
+        toward social topology indirectly through an InfoNCE loss against the social
+        branch (in-batch negatives, cosine similarity, temperature-scaled).
 
         Args:
             data: Dict containing:
@@ -274,7 +303,7 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         for epoch in range(self.n_epochs):
             epoch_bpr_loss = 0.0
             epoch_reg_loss = 0.0
-            epoch_alpha = 0.0
+            epoch_ssl_loss = 0.0
 
             for _ in range(n_batches):
                 users, pos_items, neg_items = _sample_training_batch(
@@ -284,14 +313,14 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
                 pos_t = torch.LongTensor(pos_items).to(self.device)
                 neg_t = torch.LongTensor(neg_items).to(self.device)
 
-                # Forward: propagate CF and Social branches independently, fuse once
-                user_emb, item_emb, alpha = self.model(
+                # Forward: propagate CF and Social branches independently
+                E_user_cf, E_item_cf, E_user_social = self.model(
                     self.adj_ui, self.adj_iu, self.adj_social
                 )
 
-                u_emb = user_emb[users_t]
-                pos_emb = item_emb[pos_t]
-                neg_emb = item_emb[neg_t]
+                u_emb = E_user_cf[users_t]
+                pos_emb = E_item_cf[pos_t]
+                neg_emb = E_item_cf[neg_t]
 
                 pos_scores = (u_emb * pos_emb).sum(dim=1)
                 neg_scores = (u_emb * neg_emb).sum(dim=1)
@@ -303,7 +332,11 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
                     + self.model.item_emb_cf.weight[neg_t].norm(2).pow(2)
                 ) / self.batch_size
 
-                loss_total = loss_bpr + reg_loss
+                loss_scl = _info_nce_loss(
+                    E_user_cf, E_user_social, users_t, self.temperature
+                )
+
+                loss_total = loss_bpr + reg_loss + self.ssl_weight * loss_scl
 
                 optimizer.zero_grad()
                 loss_total.backward()
@@ -311,24 +344,25 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
 
                 epoch_bpr_loss += loss_bpr.item()
                 epoch_reg_loss += reg_loss.item()
-                epoch_alpha += alpha.mean().item()
+                epoch_ssl_loss += loss_scl.item()
 
             avg_bpr = epoch_bpr_loss / n_batches
             avg_reg = epoch_reg_loss / n_batches
-            avg_alpha = epoch_alpha / n_batches
+            avg_ssl = epoch_ssl_loss / n_batches
 
             if (epoch + 1) % 10 == 0 or epoch == 0:
                 print(
                     f"  SocialGCN Epoch {epoch + 1:2d}/{self.n_epochs} | "
-                    f"BPR: {avg_bpr:.4f} | Reg: {avg_reg:.4f} | mean(alpha): {avg_alpha:.4f}"
+                    f"BPR: {avg_bpr:.4f} | Reg: {avg_reg:.4f} | SSL: {avg_ssl:.4f}"
                 )
 
         # Cache representations
         self._cache_embeddings()
 
     def _cache_embeddings(self) -> None:
-        """Pre-compute and cache fused user (E_user_final) and CF item (E_item_cf)
-        embeddings for O(1) inference."""
+        """Pre-compute and cache CF user (E_user_cf) and CF item (E_item_cf)
+        embeddings for O(1) inference. The social embedding is training-only and is
+        discarded here -- it has no role at inference time."""
         self.model.eval()
         with torch.no_grad():
             self._user_emb, self._item_emb, _ = self.model(
