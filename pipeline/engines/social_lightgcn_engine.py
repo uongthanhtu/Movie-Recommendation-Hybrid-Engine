@@ -1,10 +1,13 @@
 """
 Social-LightGCN Engine — Social-Aware Graph Convolutional Network for recommendation (PyTorch).
 
-Integrates collaborative signals (from bipartite user-item graph structures) and social signals 
+Integrates collaborative signals (from bipartite user-item graph structures) and social signals
 (from user-user trust networks) via an Adaptive Attention Gate at each layer (Early Fusion).
-Optimized via an Adaptive Multi-Task Learning (MTL) Loss formulation combining BPR ranking, 
-rating regression, and social reconstruction under self-adaptive log-variance weights.
+Optimized via a hybrid Multi-Task Learning (MTL) Loss: BPR ranking and rating regression are
+self-adaptively weighted via learned log-variance parameters (Kendall et al.); the social
+reconstruction term uses a fixed, explicitly-configurable `social_loss_weight` instead (sub-project
+6: Graph Denoising & Loss Tuning) -- this prevents the social signal from dominating gradient
+updates and crowding out the primary collaborative-filtering objective.
 
 Technical contract inherited from BaseRecommenderEngine.
 """
@@ -253,6 +256,7 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         reg: float = 1e-4,
         n_epochs: int = 30,
         batch_size: int = 2048,
+        social_loss_weight: float = 0.01,
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.num_users = num_users
@@ -262,6 +266,7 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
         self.reg = reg
         self.n_epochs = n_epochs
         self.batch_size = batch_size
+        self.social_loss_weight = social_loss_weight
 
         self.model = SocialLightGCNModel(
             num_users, num_items, embedding_dim, num_layers
@@ -386,9 +391,9 @@ class SocialLightGCNEngine(BaseRecommenderEngine):
                 u_emb_social_v = user_emb[social_v_t]
                 social_preds = (u_emb_social_u * u_emb_social_v).sum(dim=1)
 
-                loss_social = 0.5 * torch.exp(-self.model.log_vars[2]) * F.mse_loss(
+                loss_social = self.social_loss_weight * F.mse_loss(
                     torch.sigmoid(social_preds), social_trust_t
-                ) + 0.5 * self.model.log_vars[2]
+                )
 
                 # Weight decay (L2 Regularization) on base embeddings
                 reg_loss = self.reg * (
