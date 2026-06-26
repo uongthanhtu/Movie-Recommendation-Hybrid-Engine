@@ -53,6 +53,12 @@ class DatasetConfig:
             where a negative weight encodes explicit distrust (Epinions), as opposed
             to a plain undirected friendship/trust concept with no distrust notion
             (Ciao, Yelp, FilmTrust, Douban). Defaults to False (no-op) for all of them.
+        denoise_social_graph: if True, prune trust edges whose endpoints' TRAIN-ONLY
+            item-interaction overlap (Jaccard similarity) falls below
+            denoise_jaccard_threshold, right before social_csr is built -- removes
+            "garbage" social edges between users who are connected but don't share
+            tastes (a homophily filter). Defaults to False (no-op).
+        denoise_jaccard_threshold: only consulted when denoise_social_graph is True.
     """
     name: str
     data_dir: str
@@ -69,6 +75,8 @@ class DatasetConfig:
     seed: int = 42
     manual_download_instructions: str = ""
     filter_negative_trust: bool = False
+    denoise_social_graph: bool = False
+    denoise_jaccard_threshold: float = 0.05
 
 
 CIAO_CONFIG = DatasetConfig(
@@ -89,6 +97,7 @@ CIAO_CONFIG = DatasetConfig(
     rating_threshold=3.0,
     test_ratio=0.2,
     seed=42,
+    denoise_social_graph=True,
 )
 
 YELP_CONFIG = DatasetConfig(
@@ -108,6 +117,7 @@ YELP_CONFIG = DatasetConfig(
     rating_threshold=0.0,
     test_ratio=0.2,
     seed=42,
+    denoise_social_graph=True,
 )
 
 FILMTRUST_CONFIG = DatasetConfig(
