@@ -121,6 +121,9 @@ class ExplicitTrustLoader(BaseDatasetLoader):
         train_dict = lu.build_dict(df_train)
         test_dict = lu.build_dict(df_test)
 
+        if cfg.denoise_social_graph:
+            df_trust = lu.denoise_social_edges(df_trust, user_map, train_csr, cfg.denoise_jaccard_threshold)
+
         social_csr = self._build_social_matrix(df_trust, user_map, num_users)
         print(f"    Social: {social_csr.nnz:,} edges (symmetric)", flush=True)
 
