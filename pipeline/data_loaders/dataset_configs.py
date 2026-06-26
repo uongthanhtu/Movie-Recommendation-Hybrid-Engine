@@ -98,6 +98,7 @@ CIAO_CONFIG = DatasetConfig(
     test_ratio=0.2,
     seed=42,
     denoise_social_graph=True,
+    denoise_jaccard_threshold=0.01,
 )
 
 YELP_CONFIG = DatasetConfig(
@@ -118,6 +119,7 @@ YELP_CONFIG = DatasetConfig(
     test_ratio=0.2,
     seed=42,
     denoise_social_graph=True,
+    denoise_jaccard_threshold=0.01,
 )
 
 FILMTRUST_CONFIG = DatasetConfig(
