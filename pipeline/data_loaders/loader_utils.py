@@ -10,6 +10,7 @@ into this module; neither of them owns it.
 from __future__ import annotations
 
 import io
+import logging
 import os
 import zipfile
 import urllib.request
@@ -18,6 +19,8 @@ from typing import Dict, List, Set, Tuple
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+
+_logger = logging.getLogger(__name__)
 
 
 class ManualDownloadRequiredError(RuntimeError):
@@ -215,4 +218,69 @@ def build_dict(df: pd.DataFrame) -> Dict[int, Set[int]]:
     result: Dict[int, Set[int]] = {}
     for u, i in zip(df["u_idx"].values, df["i_idx"].values):
         result.setdefault(int(u), set()).add(int(i))
+    return result
+
+
+# ------------------------------------------------------------------
+# Social Graph Denoising (Homophily Filter)
+# ------------------------------------------------------------------
+def denoise_social_edges(
+    df_trust: pd.DataFrame,
+    user_map: Dict[str, int],
+    train_csr: sp.csr_matrix,
+    jaccard_threshold: float,
+) -> pd.DataFrame:
+    """
+    Prune low-homophily trust edges: for each (src, dst) edge, compute the Jaccard
+    similarity of src's and dst's TRAIN-ONLY item interaction sets (train_csr only --
+    never test-set interactions, matching the anti-leakage precedent
+    pipeline/utils/sparse_jaccard.py established for derived trust); drop edges whose
+    similarity is below jaccard_threshold. Returns a filtered copy of df_trust (same
+    columns/dtypes as the input, fresh 0..n-1 index). Logs how many edges were pruned.
+
+    Fully vectorized: computes per-edge intersection counts via
+    binary[s_idx].multiply(binary[d_idx]).sum(axis=1) -- bounded by edge count, not
+    num_users^2 -- no Python loop over users or edges.
+    """
+    df = df_trust.copy()
+    df["s_idx"] = df["src"].map(user_map)
+    df["d_idx"] = df["dst"].map(user_map)
+    df = df.dropna(subset=["s_idx", "d_idx"])
+    df["s_idx"] = df["s_idx"].astype(int)
+    df["d_idx"] = df["d_idx"].astype(int)
+
+    n_before = len(df_trust)
+
+    if len(df) == 0:
+        _logger.info(
+            "[HomophilyFilter] Garbage edges pruned: %d/%d (0.00%%, threshold=%.4f) -- no mappable edges",
+            n_before, n_before, jaccard_threshold,
+        )
+        return df_trust.iloc[0:0].reset_index(drop=True)
+
+    binary = train_csr.copy()
+    binary.data = np.ones_like(binary.data, dtype=np.float32)
+    binary = binary.tocsr()
+    degrees = np.asarray(binary.sum(axis=1)).flatten()
+
+    s_idx = df["s_idx"].values
+    d_idx = df["d_idx"].values
+
+    intersection = np.asarray(binary[s_idx].multiply(binary[d_idx]).sum(axis=1)).flatten()
+    union = degrees[s_idx] + degrees[d_idx] - intersection
+    with np.errstate(divide="ignore", invalid="ignore"):
+        jaccard = np.where(union > 0, intersection / union, 0.0)
+
+    keep_mask = jaccard >= jaccard_threshold
+    kept_index = df.index[keep_mask]
+
+    result = df_trust.loc[kept_index].reset_index(drop=True)
+
+    n_after = len(result)
+    n_pruned = n_before - n_after
+    pct = (100.0 * n_pruned / n_before) if n_before > 0 else 0.0
+    _logger.info(
+        "[HomophilyFilter] Garbage edges pruned: %d/%d (%.2f%%, threshold=%.4f) -- %d edges kept",
+        n_pruned, n_before, pct, jaccard_threshold, n_after,
+    )
     return result
