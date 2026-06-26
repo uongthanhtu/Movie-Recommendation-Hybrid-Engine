@@ -4,42 +4,42 @@
 
 | Model | Recall@10 | NDCG@10 | Train Time (s) | Latency (ms) |
 |---|---|---|---|---|
-| lightgcn | 0.0812 | 0.0528 | 30.6 | 0.17 |
-| trustsvd | 0.0073 | 0.0038 | 0.5 | 0.15 |
-| social_lightgcn | 0.0636 | 0.0416 | 18.8 | 0.16 |
+| lightgcn | 0.0787 | 0.0519 | 30.3 | 0.18 |
+| trustsvd | 0.0049 | 0.0030 | 0.5 | 0.16 |
+| social_lightgcn | 0.0730 | 0.0462 | 19.9 | 0.17 |
 
 ## epinions -- Mode A: Explicit Trust
 
 | Model | Recall@10 | NDCG@10 | Train Time (s) | Latency (ms) |
 |---|---|---|---|---|
-| lightgcn | 0.0281 | 0.0221 | 281.8 | 0.35 |
-| trustsvd | 0.0162 | 0.0117 | 12.5 | 0.30 |
-| social_lightgcn | 0.0278 | 0.0220 | 530.3 | 0.32 |
+| lightgcn | 0.0282 | 0.0222 | 279.9 | 0.32 |
+| trustsvd | 0.0162 | 0.0119 | 12.3 | 0.32 |
+| social_lightgcn | 0.0339 | 0.0257 | 770.6 | 0.32 |
 
 ## filmtrust -- Mode A: Explicit Trust
 
 | Model | Recall@10 | NDCG@10 | Train Time (s) | Latency (ms) |
 |---|---|---|---|---|
-| lightgcn | 0.6393 | 0.5180 | 47.7 | 0.19 |
-| trustsvd | 0.3538 | 0.3019 | 0.7 | 0.17 |
-| social_lightgcn | 0.6390 | 0.5196 | 30.8 | 0.17 |
+| lightgcn | 0.6392 | 0.5182 | 47.9 | 0.20 |
+| trustsvd | 0.3538 | 0.3021 | 0.8 | 0.18 |
+| social_lightgcn | 0.6346 | 0.5176 | 32.5 | 0.18 |
 
 ## ml-100k -- Mode B: Implicit Trust (ABLATION STUDY)
 
 | Model | Recall@10 | NDCG@10 | Train Time (s) | Latency (ms) |
 |---|---|---|---|---|
-| funksvd | 0.0374 | 0.0957 | 0.6 | 5.84 |
-| lightgcn | 0.1679 | 0.3104 | 263.8 | 0.18 |
-| trustsvd | 0.0713 | 0.1730 | 1.9 | 0.17 |
-| social_lightgcn | 0.1560 | 0.2727 | 157.9 | 0.18 |
+| funksvd | 0.0352 | 0.0939 | 0.5 | 5.26 |
+| lightgcn | 0.1748 | 0.3202 | 264.0 | 0.20 |
+| trustsvd | 0.0712 | 0.1740 | 1.9 | 0.17 |
+| social_lightgcn | 0.1544 | 0.2767 | 161.2 | 0.20 |
 
 ## yelp -- Mode A: Explicit Trust
 
 | Model | Recall@10 | NDCG@10 | Train Time (s) | Latency (ms) |
 |---|---|---|---|---|
-| lightgcn | 0.0376 | 0.0255 | 278.5 | 0.42 |
-| trustsvd | 0.0063 | 0.0046 | 7.1 | 0.32 |
-| social_lightgcn | 0.0352 | 0.0243 | 354.3 | 0.35 |
+| lightgcn | 0.0376 | 0.0255 | 283.3 | 0.34 |
+| trustsvd | 0.0061 | 0.0041 | 7.0 | 0.31 |
+| social_lightgcn | 0.0362 | 0.0242 | 586.6 | 0.32 |
 
 ## Skipped Datasets
 
